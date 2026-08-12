@@ -8,7 +8,8 @@ import {
   deleteBug,
   listReportFacets,
   createBug,
-  getProjectById,
+  resolveBugProjectId,
+  getProjectRaw,
   isProjectMember,
   resolveTagLabel,
   FREQUENCY_LABELS,
@@ -16,6 +17,12 @@ import {
 import { requireAuth } from '../auth.js'
 import { saveVideo, deleteFile } from '../storage.js'
 import { asyncHandler } from '../asyncHandler.js'
+import {
+  resolveProjectDbClient,
+  resolveProjectStorageConfig,
+  checkManagedStorageQuota,
+  addManagedStorageUsage,
+} from '../projectDataAccess.js'
 
 const router = express.Router()
 
@@ -32,6 +39,19 @@ function requireApiKey(req, res, next) {
   next()
 }
 
+// projectIdからそのプロジェクトのバグデータ用DBクライアントを解決する。
+// self_hostedでまだTursoが未設定なら409で「使えない」ことを明示する（要件5）。
+async function requireProjectDbClient(res, projectId) {
+  const project = await getProjectRaw(projectId)
+  if (!project) return null
+  const access = await resolveProjectDbClient(project)
+  if (!access.ready) {
+    res.status(409).json({ error: 'database not configured for this project', code: access.reason })
+    return null
+  }
+  return { project, client: access.client }
+}
+
 router.get(
   '/reports',
   requireAuth,
@@ -43,7 +63,9 @@ router.get(
     if (!(await isProjectMember(Number(projectId), req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    res.json(await listBugs({ projectId: Number(projectId), status, tag, platform, build, who, q }))
+    const resolved = await requireProjectDbClient(res, Number(projectId))
+    if (!resolved) return
+    res.json(await listBugs(resolved.client, { projectId: Number(projectId), status, tag, platform, build, who, q }))
   })
 )
 
@@ -58,7 +80,9 @@ router.get(
     if (!(await isProjectMember(Number(projectId), req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    res.json(await listReportFacets(Number(projectId)))
+    const resolved = await requireProjectDbClient(res, Number(projectId))
+    if (!resolved) return
+    res.json(await listReportFacets(resolved.client, Number(projectId)))
   })
 )
 
@@ -66,10 +90,15 @@ router.get(
   '/reports/:id',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const bug = await getBugById(Number(req.params.id))
-    if (!bug || !(await isProjectMember(bug.projectId, req.user.email))) {
+    const id = Number(req.params.id)
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+    const bug = await getBugById(resolved.client, id)
+    if (!bug) return res.status(404).json({ error: 'not found' })
     res.json(bug)
   })
 )
@@ -81,10 +110,17 @@ router.patch(
   requireAuth,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id)
-    const existing = await getBugById(id)
-    if (!existing || !(await isProjectMember(existing.projectId, req.user.email))) {
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+    const { client } = resolved
+
+    const existing = await getBugById(client, id)
+    if (!existing) return res.status(404).json({ error: 'not found' })
+
     const { status, title, tag, desc, who, build, platform, frequency } = req.body ?? {}
 
     const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
@@ -98,9 +134,9 @@ router.patch(
     const hasFieldUpdates = [title, tag, desc, who, build, platform, frequency].some((v) => v != null)
 
     let updated
-    if (status) updated = await updateBugStatus(id, status)
+    if (status) updated = await updateBugStatus(client, id, status)
     if (hasFieldUpdates) {
-      updated = await updateBugFields(id, { title, tag, desc, who, build, platform, frequency })
+      updated = await updateBugFields(client, id, { title, tag, desc, who, build, platform, frequency })
     }
     if (!updated) {
       const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing
@@ -137,7 +173,8 @@ router.post(
     if (missing.length > 0) {
       return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
     }
-    if (!(await getProjectById(metadata.projectId))) {
+    const project = await getProjectRaw(metadata.projectId)
+    if (!project) {
       return res.status(400).json({ error: `unknown projectId: ${metadata.projectId}` })
     }
     const frequency = metadata.frequency || 'unknown'
@@ -148,9 +185,23 @@ router.post(
       return res.status(400).json({ error: 'video file is required' })
     }
 
-    const { videoUrl } = await saveVideo(req.file.buffer, req.file.originalname)
+    const dbAccess = await resolveProjectDbClient(project)
+    if (!dbAccess.ready) {
+      return res.status(409).json({ error: 'database not configured for this project', code: dbAccess.reason })
+    }
+    const storageTarget = resolveProjectStorageConfig(project)
+    if (!storageTarget.ready) {
+      return res.status(409).json({ error: 'storage not configured for this project', code: storageTarget.reason })
+    }
+    const quota = await checkManagedStorageQuota(project, req.file.size)
+    if (!quota.ok) {
+      return res.status(413).json({ error: 'storage quota exceeded', code: quota.reason })
+    }
 
-    const bug = await createBug({
+    const { videoUrl, bytes } = await saveVideo(storageTarget, req.file.buffer, req.file.originalname)
+    if (storageTarget.managed) await addManagedStorageUsage(project.id, bytes)
+
+    const bug = await createBug(dbAccess.client, {
       projectId: metadata.projectId,
       title: metadata.title,
       tag: metadata.tag,
@@ -161,6 +212,7 @@ router.post(
       platform: metadata.platform,
       frequency,
       videoUrl,
+      videoBytes: bytes,
       fps: metadata.fps,
       durationFrames: metadata.durationFrames,
       inputs: Array.isArray(metadata.inputs) ? metadata.inputs : [],
@@ -189,7 +241,10 @@ router.post(
       return res.status(400).json({ error: `unknown frequency: ${frequency}` })
     }
 
-    const bug = await createBug({
+    const resolved = await requireProjectDbClient(res, Number(body.projectId))
+    if (!resolved) return
+
+    const bug = await createBug(resolved.client, {
       projectId: Number(body.projectId),
       title: body.title,
       tag: body.tag,
@@ -213,13 +268,28 @@ router.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id)
-    const existing = await getBugById(id)
-    if (!existing || !(await isProjectMember(existing.projectId, req.user.email))) {
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    const result = await deleteBug(id)
+    const project = await getProjectRaw(projectId)
+    const dbAccess = await resolveProjectDbClient(project)
+    if (!dbAccess.ready) {
+      return res.status(409).json({ error: 'database not configured for this project', code: dbAccess.reason })
+    }
+
+    const existing = await getBugById(dbAccess.client, id)
+    if (!existing) return res.status(404).json({ error: 'not found' })
+
+    const result = await deleteBug(dbAccess.client, id)
     if (result?.deletedVideoUrl) {
-      await deleteFile(result.deletedVideoUrl)
+      const storageTarget = resolveProjectStorageConfig(project)
+      if (storageTarget.ready) {
+        await deleteFile(storageTarget, result.deletedVideoUrl)
+        if (storageTarget.managed && result.deletedVideoBytes) {
+          await addManagedStorageUsage(project.id, -result.deletedVideoBytes)
+        }
+      }
     }
     res.json({ deleted: true })
   })

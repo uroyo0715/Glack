@@ -87,6 +87,36 @@ describe('App (mock client integration)', () => {
     await screen.findByText('プロジェクト: テストゲーム')
   })
 
+  it('blocks report features on a new (self_hosted, unconfigured) project until Turso is set up', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Googleでログイン' }))
+    await screen.findByText('Nightfall Trail')
+
+    await user.click(screen.getByRole('button', { name: /新規プロジェクト/ }))
+    await user.type(screen.getByPlaceholderText('プロジェクト名'), '未設定ゲーム')
+    await user.click(screen.getByRole('button', { name: '作成' }))
+    await user.click(await screen.findByText('未設定ゲーム'))
+
+    await screen.findByText('プロジェクト: 未設定ゲーム')
+    // 新規プロジェクトはself_hosted・未設定から始まるため、報告機能はブロックされている
+    await screen.findByText(/データベース（Turso）が設定されていない/)
+    expect(screen.queryByPlaceholderText('タイトル・内容で検索...')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'ストレージ設定を開く' }))
+    await user.type(
+      await screen.findByPlaceholderText(/Database URL/),
+      'libsql://example-team-db.turso.io'
+    )
+    await user.type(screen.getByPlaceholderText('Auth Token'), 'dummy-token')
+    await user.click(screen.getByRole('button', { name: 'Tursoの接続情報を保存' }))
+
+    // 設定後はブロック解除され、通常の一覧UIが使えるようになる
+    await screen.findByPlaceholderText('タイトル・内容で検索...')
+    expect(screen.queryByText(/データベース（Turso）が設定されていない/)).not.toBeInTheDocument()
+  })
+
   it('deletes a project (and its bugs) from the projects screen', async () => {
     const user = userEvent.setup()
     render(<App />)

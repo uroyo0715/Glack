@@ -3,6 +3,7 @@ import { STATUS_COLUMNS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
 import FilterBar from '../components/FilterBar.jsx'
 import MembersPanel from '../components/MembersPanel.jsx'
 import NewReportForm from '../components/NewReportForm.jsx'
+import StorageSettingsPanel from '../components/StorageSettingsPanel.jsx'
 
 function statusLabel(key) {
   return STATUS_COLUMNS.find((s) => s.key === key)?.label ?? key
@@ -24,6 +25,9 @@ export default function BugListPage({
   onRemoveMember,
   onCreateReport,
   defaultReporterName,
+  storageStatus,
+  onFetchStorageStatus,
+  onUpdateStorage,
   query,
   setQuery,
   statusFilter,
@@ -39,12 +43,17 @@ export default function BugListPage({
   const [view, setView] = useState('table') // 'table' | 'kanban'
   const [showMembers, setShowMembers] = useState(false)
   const [showNewReport, setShowNewReport] = useState(false)
+  const [showStorage, setShowStorage] = useState(false)
 
   // 絞り込みは App.jsx が fetchReports() 呼び出し時にサーバー側（クエリパラメータ）で行う。
   // ここでは取得済みの bugs をそのまま表示する。
   const filtered = bugs
   // ステータスの絞り込みで外されたタブはカンバンでも列ごと非表示にする（カードだけでなく）。
   const visibleStatusColumns = STATUS_COLUMNS.filter((col) => statusFilter.includes(col.key))
+
+  // self_hostedでTurso未設定の間は、報告機能そのものが使えない（要件）。
+  const storageBlocked =
+    storageStatus != null && storageStatus.storageMode === 'self_hosted' && !storageStatus.tursoConfigured
 
   return (
     <main className="list-page">
@@ -58,6 +67,12 @@ export default function BugListPage({
             </button>
             <button className="help-link" onClick={() => setShowMembers((v) => !v)}>
               {showMembers ? 'メンバーを閉じる' : 'メンバー'}
+            </button>
+            <button
+              className={`help-link ${storageBlocked ? 'help-link-warning' : ''}`}
+              onClick={() => setShowStorage((v) => !v)}
+            >
+              {showStorage ? 'ストレージ設定を閉じる' : storageBlocked ? '⚠ ストレージ設定' : 'ストレージ設定'}
             </button>
             <div className="view-toggle">
               <button
@@ -77,109 +92,131 @@ export default function BugListPage({
         </div>
       </div>
 
-      {showNewReport && (
-        <NewReportForm
+      {showStorage && (
+        <StorageSettingsPanel
           projectId={projectId}
-          defaultWho={defaultReporterName}
-          buildOptions={reportFacets.builds}
-          onFetchMembers={onFetchMembers}
-          onCreate={onCreateReport}
-          onClose={() => setShowNewReport(false)}
+          onFetchStatus={onFetchStorageStatus}
+          onUpdateStorage={onUpdateStorage}
         />
       )}
 
-      {showMembers && (
-        <MembersPanel
-          projectId={projectId}
-          onFetchMembers={onFetchMembers}
-          onAddMembers={onAddMembers}
-          onRemoveMember={onRemoveMember}
-        />
-      )}
-
-      <FilterBar
-        query={query}
-        setQuery={setQuery}
-        statusFilter={statusFilter}
-        toggleStatus={toggleStatus}
-        tagFilter={tagFilter}
-        toggleTag={toggleTag}
-        buildFilter={buildFilter}
-        setBuildFilter={setBuildFilter}
-        whoFilter={whoFilter}
-        setWhoFilter={setWhoFilter}
-        reportFacets={reportFacets}
-        resultCount={filtered.length}
-      />
-
-      {bugsLoading && <div className="list-inline-status">更新中...</div>}
-      {!bugsLoading && bugsError && (
-        <div className="list-inline-status list-inline-status-error">
-          最新の一覧を取得できませんでした: {bugsError}
+      {storageBlocked ? (
+        <div className="storage-blocking-panel">
+          <p>
+            このプロジェクトはまだデータベース（Turso）が設定されていないため、報告の閲覧・作成ができません。
+            「ストレージ設定」から接続情報を入力してください。
+          </p>
+          <button className="help-link" onClick={() => setShowStorage(true)}>
+            ストレージ設定を開く
+          </button>
         </div>
-      )}
-
-      {view === 'table' ? (
-        <div className="bug-table">
-          <div className="bug-table-head">
-            <div className="col-title">タイトル</div>
-            <div className="col-tag">種類</div>
-            <div className="col-status">対応状況</div>
-            <div className="col-who">報告者</div>
-            <div className="col-build">ビルド</div>
-            <div className="col-freq">頻度</div>
-          </div>
-          <div className="bug-table-body">
-            {filtered.length === 0 && (
-              <div className="empty-hint table-empty">条件に一致する報告はありません</div>
-            )}
-            {filtered.map((b) => (
-              <div className="bug-row" key={b.id} onClick={() => onOpen(b.id)}>
-                <div className="col-title">{b.title}</div>
-                <div className="col-tag">
-                  <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
-                </div>
-                <div className="col-status">
-                  <span className={`status-badge ${b.status}`}>{statusLabel(b.status)}</span>
-                </div>
-                <div className="col-who">{b.who}</div>
-                <div className="col-build mono">{b.build}</div>
-                <div className="col-freq">{frequencyLabel(b.frequency)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : visibleStatusColumns.length === 0 ? (
-        <div className="empty-hint table-empty">対応状況の絞り込みがすべて解除されています</div>
       ) : (
-        <div
-          className="kanban"
-          style={{ gridTemplateColumns: `repeat(${visibleStatusColumns.length}, minmax(0, 1fr))` }}
-        >
-          {visibleStatusColumns.map((col) => {
-            const items = filtered.filter((b) => b.status === col.key)
-            return (
-              <div className="kanban-col" key={col.key}>
-                <div className="kanban-col-head">
-                  <span>{col.label}</span>
-                  <span className="count">{items.length}</span>
-                </div>
-                <div className="kanban-col-body">
-                  {items.length === 0 && <div className="empty-hint">報告なし</div>}
-                  {items.map((b) => (
-                    <div className="bug-card" key={b.id} onClick={() => onOpen(b.id)}>
-                      <div className="title">{b.title}</div>
-                      <div className="meta">
-                        <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
-                        <span className="who">{b.who}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        <>
+          {showNewReport && (
+            <NewReportForm
+              projectId={projectId}
+              defaultWho={defaultReporterName}
+              buildOptions={reportFacets.builds}
+              onFetchMembers={onFetchMembers}
+              onCreate={onCreateReport}
+              onClose={() => setShowNewReport(false)}
+            />
+          )}
+
+          {showMembers && (
+            <MembersPanel
+              projectId={projectId}
+              onFetchMembers={onFetchMembers}
+              onAddMembers={onAddMembers}
+              onRemoveMember={onRemoveMember}
+            />
+          )}
+
+          <FilterBar
+            query={query}
+            setQuery={setQuery}
+            statusFilter={statusFilter}
+            toggleStatus={toggleStatus}
+            tagFilter={tagFilter}
+            toggleTag={toggleTag}
+            buildFilter={buildFilter}
+            setBuildFilter={setBuildFilter}
+            whoFilter={whoFilter}
+            setWhoFilter={setWhoFilter}
+            reportFacets={reportFacets}
+            resultCount={filtered.length}
+          />
+
+          {bugsLoading && <div className="list-inline-status">更新中...</div>}
+          {!bugsLoading && bugsError && (
+            <div className="list-inline-status list-inline-status-error">
+              最新の一覧を取得できませんでした: {bugsError}
+            </div>
+          )}
+
+          {view === 'table' ? (
+            <div className="bug-table">
+              <div className="bug-table-head">
+                <div className="col-title">タイトル</div>
+                <div className="col-tag">種類</div>
+                <div className="col-status">対応状況</div>
+                <div className="col-who">報告者</div>
+                <div className="col-build">ビルド</div>
+                <div className="col-freq">頻度</div>
               </div>
-            )
-          })}
-        </div>
+              <div className="bug-table-body">
+                {filtered.length === 0 && (
+                  <div className="empty-hint table-empty">条件に一致する報告はありません</div>
+                )}
+                {filtered.map((b) => (
+                  <div className="bug-row" key={b.id} onClick={() => onOpen(b.id)}>
+                    <div className="col-title">{b.title}</div>
+                    <div className="col-tag">
+                      <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
+                    </div>
+                    <div className="col-status">
+                      <span className={`status-badge ${b.status}`}>{statusLabel(b.status)}</span>
+                    </div>
+                    <div className="col-who">{b.who}</div>
+                    <div className="col-build mono">{b.build}</div>
+                    <div className="col-freq">{frequencyLabel(b.frequency)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : visibleStatusColumns.length === 0 ? (
+            <div className="empty-hint table-empty">対応状況の絞り込みがすべて解除されています</div>
+          ) : (
+            <div
+              className="kanban"
+              style={{ gridTemplateColumns: `repeat(${visibleStatusColumns.length}, minmax(0, 1fr))` }}
+            >
+              {visibleStatusColumns.map((col) => {
+                const items = filtered.filter((b) => b.status === col.key)
+                return (
+                  <div className="kanban-col" key={col.key}>
+                    <div className="kanban-col-head">
+                      <span>{col.label}</span>
+                      <span className="count">{items.length}</span>
+                    </div>
+                    <div className="kanban-col-body">
+                      {items.length === 0 && <div className="empty-hint">報告なし</div>}
+                      {items.map((b) => (
+                        <div className="bug-card" key={b.id} onClick={() => onOpen(b.id)}>
+                          <div className="title">{b.title}</div>
+                          <div className="meta">
+                            <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
+                            <span className="who">{b.who}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </main>
   )

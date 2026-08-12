@@ -18,6 +18,29 @@ const membersByProject = new Map(
   projects.map((p) => [p.id, [{ email: 'demo@example.com', displayName: 'デモユーザー' }]])
 )
 
+// projectId -> { storageMode, isManagedAllowed, tursoConfigured, r2Configured }。
+// シードプロジェクトは最初からmanaged（＝Glankの共有DB相当）で使える状態にしておき、
+// 新規作成したプロジェクトは実際のバックエンドと同じくself_hosted・未設定から始まる
+// （＝設定するまでバグ関連の操作がブロックされる）。
+const storageByProject = new Map(
+  projects.map((p) => [
+    p.id,
+    { storageMode: 'managed', isManagedAllowed: true, tursoConfigured: true, r2Configured: true },
+  ])
+)
+
+function requireStorageReady(projectId) {
+  const status = storageByProject.get(Number(projectId))
+  if (!status) return
+  const usingManaged = status.storageMode === 'managed' && status.isManagedAllowed
+  if (usingManaged) return
+  if (!status.tursoConfigured) {
+    const err = new Error('database not configured for this project')
+    err.code = 'turso_not_configured'
+    throw err
+  }
+}
+
 const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // バックエンド未接続時は実際のGoogle OAuthを行えないため、固定のダミーユーザーで即ログインする。
@@ -77,7 +100,51 @@ export async function createProject(name, imageFile) {
   const project = { id: nextProjectId++, name: name.trim(), imageUrl }
   projects = [...projects, project]
   membersByProject.set(project.id, [{ email: currentUser.email, displayName: currentUser.displayName }])
+  storageByProject.set(project.id, {
+    storageMode: 'self_hosted',
+    isManagedAllowed: false,
+    tursoConfigured: false,
+    r2Configured: false,
+  })
   return project
+}
+
+/** @returns {Promise<{storageMode: 'self_hosted' | 'managed', isManagedAllowed: boolean, tursoConfigured: boolean, r2Configured: boolean}>} */
+export async function fetchProjectStorageStatus(projectId) {
+  await delay(80)
+  requireLogin()
+  return { ...storageByProject.get(Number(projectId)) }
+}
+
+/** @returns {Promise<{storageMode, isManagedAllowed, tursoConfigured, r2Configured}>} */
+export async function updateProjectStorage(projectId, { storageMode, turso, r2 } = {}) {
+  await delay(150)
+  requireLogin()
+  const id = Number(projectId)
+  const current = storageByProject.get(id)
+  if (!current) throw new Error(`updateProjectStorage: unknown project ${projectId}`)
+
+  if (storageMode != null) {
+    if (storageMode !== 'self_hosted' && storageMode !== 'managed') {
+      throw new Error(`unknown storageMode: ${storageMode}`)
+    }
+    if (storageMode === 'managed' && !current.isManagedAllowed) {
+      throw new Error('managed plan is not enabled for this project')
+    }
+    current.storageMode = storageMode
+  }
+  if (turso != null) {
+    if (!turso.url || !turso.authToken) throw new Error('turso.url and turso.authToken are required')
+    current.tursoConfigured = true
+  }
+  if (r2 != null) {
+    const required = ['accountId', 'accessKeyId', 'secretAccessKey', 'bucket', 'publicUrl']
+    const missing = required.filter((key) => !r2[key])
+    if (missing.length > 0) throw new Error(`r2 missing fields: ${missing.join(', ')}`)
+    current.r2Configured = true
+  }
+  storageByProject.set(id, current)
+  return { ...current }
 }
 
 /** @returns {Promise<{email: string, displayName: string | null}[]>} */
@@ -127,7 +194,10 @@ export async function deleteProjects(ids) {
   const deletedProjectIds = projects.filter((p) => idSet.has(p.id)).map((p) => p.id)
   projects = projects.filter((p) => !idSet.has(p.id))
   bugs = bugs.filter((b) => !idSet.has(b.projectId))
-  deletedProjectIds.forEach((id) => membersByProject.delete(id))
+  deletedProjectIds.forEach((id) => {
+    membersByProject.delete(id)
+    storageByProject.delete(id)
+  })
   return { deletedProjectIds }
 }
 
@@ -135,6 +205,7 @@ export async function deleteProjects(ids) {
 export async function fetchReports(filters = {}) {
   await delay()
   requireLogin()
+  if (filters.projectId) requireStorageReady(filters.projectId)
   let result = bugs
   if (filters.projectId) result = result.filter((b) => b.projectId === Number(filters.projectId))
   if (filters.status) result = result.filter((b) => b.status === filters.status)
@@ -156,6 +227,7 @@ export async function fetchReports(filters = {}) {
 export async function fetchReportFacets(projectId) {
   await delay(80)
   requireLogin()
+  requireStorageReady(projectId)
   const projectBugs = bugs.filter((b) => b.projectId === Number(projectId))
   const builds = [...new Set(projectBugs.map((b) => b.build).filter(Boolean))].sort()
   const whos = [...new Set(projectBugs.map((b) => b.who).filter(Boolean))].sort()
@@ -166,6 +238,7 @@ export async function fetchReportFacets(projectId) {
 export async function createManualReport(projectId, fields) {
   await delay(150)
   requireLogin()
+  requireStorageReady(projectId)
   const required = ['title', 'tag', 'desc', 'who', 'build', 'platform']
   const missing = required.filter((key) => !fields[key])
   if (missing.length > 0) throw new Error(`missing fields: ${missing.join(', ')}`)

@@ -11,6 +11,8 @@ import {
   fetchProjectMembers,
   addProjectMembers,
   removeProjectMember,
+  fetchProjectStorageStatus,
+  updateProjectStorage,
   fetchReports,
   fetchReport,
   fetchReportFacets,
@@ -41,6 +43,9 @@ export default function App() {
   const [bugsLoading, setBugsLoading] = useState(true)
   const [bugsError, setBugsError] = useState(null)
   const [bugsLoadedOnce, setBugsLoadedOnce] = useState(false)
+
+  const [storageStatus, setStorageStatus] = useState(null)
+  const [storageReloadToken, setStorageReloadToken] = useState(0)
 
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
@@ -146,9 +151,42 @@ export default function App() {
     })
   }
 
+  // self_hostedプロジェクトはTurso未設定の間、報告機能そのものが使えない。ストレージ設定の
+  // 状態が分かるまでは一覧取得を待ち、未設定と分かった場合は無駄なAPI呼び出し（どうせ409になる）
+  // をせずに空の一覧を出す（BugListPage側がstorageStatusを見てブロック用の案内を表示する）。
   useEffect(() => {
-    if (!user || selectedProjectId == null) return
+    if (!user || selectedProjectId == null) {
+      setStorageStatus(null)
+      return
+    }
     let cancelled = false
+    fetchProjectStorageStatus(selectedProjectId)
+      .then((result) => {
+        if (!cancelled) setStorageStatus(result)
+      })
+      .catch(() => {
+        if (!cancelled) setStorageStatus(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedProjectId, storageReloadToken])
+
+  const storageBlocked =
+    storageStatus != null && storageStatus.storageMode === 'self_hosted' && !storageStatus.tursoConfigured
+
+  useEffect(() => {
+    if (!user || selectedProjectId == null || storageStatus == null) return
+    let cancelled = false
+
+    if (storageBlocked) {
+      setBugs([])
+      setBugsError(null)
+      setBugsLoading(false)
+      setBugsLoadedOnce(true)
+      return
+    }
+
     setBugsLoading(true)
     setBugsError(null)
 
@@ -181,7 +219,18 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [user, selectedProjectId, query, statusFilter, tagFilter, buildFilter, whoFilter, reloadToken])
+  }, [
+    user,
+    selectedProjectId,
+    storageStatus,
+    storageBlocked,
+    query,
+    statusFilter,
+    tagFilter,
+    buildFilter,
+    whoFilter,
+    reloadToken,
+  ])
 
   // ビルド/報告者の絞り込みプルダウンの選択肢。テキスト検索だと表記ゆれで検索漏れが
   // 起きやすいため、プロジェクト内で実際に使われている値だけを選ばせる。
@@ -259,6 +308,14 @@ export default function App() {
     })
   }
 
+  function handleUpdateStorage(projectId, payload) {
+    return updateProjectStorage(projectId, payload).then((result) => {
+      setStorageStatus(result)
+      setStorageReloadToken((t) => t + 1) // 反映を確実にするための再取得トリガー
+      return result
+    })
+  }
+
   function handleRemoveMember(projectId, email) {
     return removeProjectMember(projectId, email).then((result) => {
       const isSelf = user && String(email).trim().toLowerCase() === user.email.trim().toLowerCase()
@@ -280,6 +337,7 @@ export default function App() {
     setBuildFilter('')
     setWhoFilter('')
     setBugsLoadedOnce(false)
+    setStorageStatus(null)
   }
 
   function backToProjects() {
@@ -413,6 +471,9 @@ export default function App() {
           onRemoveMember={handleRemoveMember}
           onCreateReport={handleCreateReport}
           defaultReporterName={user.displayName}
+          storageStatus={storageStatus}
+          onFetchStorageStatus={fetchProjectStorageStatus}
+          onUpdateStorage={handleUpdateStorage}
           query={query}
           setQuery={setQuery}
           statusFilter={statusFilter}

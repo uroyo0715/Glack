@@ -2,52 +2,54 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
-// ファイルの保存先を差し替え可能にする薄いラッパー。R2の接続情報（R2_ACCOUNT_ID等）が
-// 設定されていればCloudflare R2（S3互換）へ、なければローカルディスクへ保存する。
-// どちらの場合もルート側・Unity SDK側の呼び出し方（multipart POST → URLを受け取る）は変わらない。
+// ファイルの保存先はプロジェクトごとに変わる（storageMode次第でmanaged共有R2 / チーム自前のR2 /
+// ローカルディスク）。呼び出し側は server/src/projectDataAccess.js の resolveProjectStorageConfig()
+// が返す storageTarget（{ mode: 'r2', config } | { mode: 'local' }）を渡す。
 
 const UPLOAD_DIR = path.join(import.meta.dirname, '..', 'uploads')
 
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
-const R2_BUCKET = process.env.R2_BUCKET
-// バケットに紐づけたR2.devの開発用URL、またはカスタムドメイン。末尾の/は付けない。
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL
+// R2クライアントは接続情報ごとにキャッシュする（プロジェクトごとに毎リクエスト作り直さない）。
+const s3ClientCache = new Map() // accountId+accessKeyId -> S3Client
 
-export const usingR2 = Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET)
-
-const s3 = usingR2
-  ? new S3Client({
+function getS3Client(config) {
+  const cacheKey = `${config.accountId}:${config.accessKeyId}`
+  let client = s3ClientCache.get(cacheKey)
+  if (!client) {
+    client = new S3Client({
       region: 'auto',
-      endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
+      endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     })
-  : null
+    s3ClientCache.set(cacheKey, client)
+  }
+  return client
+}
 
 /**
+ * @param {{ mode: 'r2', config: object } | { mode: 'local' }} storageTarget
  * @param {Buffer} buffer
  * @param {string} originalName
- * @returns {Promise<{ url: string }>}
+ * @returns {Promise<{ url: string, bytes: number }>}
  */
-async function saveFile(buffer, originalName) {
+async function saveFile(storageTarget, buffer, originalName) {
   const filename = `${Date.now()}-${originalName}`
 
-  if (usingR2) {
-    await s3.send(
+  if (storageTarget.mode === 'r2') {
+    const { config } = storageTarget
+    await getS3Client(config).send(
       new PutObjectCommand({
-        Bucket: R2_BUCKET,
+        Bucket: config.bucket,
         Key: filename,
         Body: buffer,
         ContentType: guessContentType(originalName),
       })
     )
-    return { url: `${R2_PUBLIC_URL}/${filename}` }
+    return { url: `${config.publicUrl}/${filename}`, bytes: buffer.length }
   }
 
   await fs.mkdir(UPLOAD_DIR, { recursive: true })
   await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer)
-  return { url: `/uploads/${filename}` }
+  return { url: `/uploads/${filename}`, bytes: buffer.length }
 }
 
 function guessContentType(name) {
@@ -62,25 +64,30 @@ function guessContentType(name) {
   return 'application/octet-stream'
 }
 
-/** @returns {Promise<{ videoUrl: string }>} */
-export async function saveVideo(buffer, originalName) {
-  const { url } = await saveFile(buffer, originalName)
-  return { videoUrl: url }
+/** @returns {Promise<{ videoUrl: string, bytes: number }>} */
+export async function saveVideo(storageTarget, buffer, originalName) {
+  const { url, bytes } = await saveFile(storageTarget, buffer, originalName)
+  return { videoUrl: url, bytes }
 }
 
-/** @returns {Promise<{ imageUrl: string }>} */
-export async function saveImage(buffer, originalName) {
-  const { url } = await saveFile(buffer, originalName)
-  return { imageUrl: url }
+/** @returns {Promise<{ imageUrl: string, bytes: number }>} */
+export async function saveImage(storageTarget, buffer, originalName) {
+  const { url, bytes } = await saveFile(storageTarget, buffer, originalName)
+  return { imageUrl: url, bytes }
 }
 
-/** saveFile()が返したurlに対応するファイルを削除する。無ければ何もしない。 */
-export async function deleteFile(url) {
+/**
+ * saveFile()が返したurlに対応するファイルを削除する。無ければ何もしない。
+ * @param {{ mode: 'r2', config: object } | { mode: 'local' }} storageTarget
+ */
+export async function deleteFile(storageTarget, url) {
   if (!url) return
 
-  if (usingR2 && R2_PUBLIC_URL && url.startsWith(`${R2_PUBLIC_URL}/`)) {
-    const key = url.slice(`${R2_PUBLIC_URL}/`.length)
-    await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(() => {})
+  if (storageTarget?.mode === 'r2' && url.startsWith(`${storageTarget.config.publicUrl}/`)) {
+    const key = url.slice(`${storageTarget.config.publicUrl}/`.length)
+    await getS3Client(storageTarget.config)
+      .send(new DeleteObjectCommand({ Bucket: storageTarget.config.bucket, Key: key }))
+      .catch(() => {})
     return
   }
 

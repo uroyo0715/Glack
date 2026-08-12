@@ -126,6 +126,23 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
   呼び出しは`404`。**そのプロジェクトの最後の1人は削除できない**（`400`。削除すると誰もアクセス
   できなくなり、UIからは復旧不能になるため）。
 
+#### 3.0.6 ストレージ設定（self_hosted / managed）
+
+各プロジェクトは、バグデータの保存先（DB）と動画・画像の保存先（ストレージ）を
+チーム自前のもの（`self_hosted`、無料）か、Glankが用意する共有のもの（`managed`、
+有料プラン。`isManagedAllowed`が立っているプロジェクトのみ選択可）かを選べる。
+新規プロジェクトは常に`self_hosted`・未設定から始まり、Turso接続情報を設定するまで
+`/reports*`系のエンドポイントは`409 { error, code: 'turso_not_configured' }`を返す。
+
+self_hosted接続情報（Tursoの`url`/`authToken`、R2の各値）はAES-256-GCMで暗号化して
+DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由で平文では読み出せない
+（設定済みかどうかの真偽値だけを返す）。
+
+- `GET /projects/:id/storage` — `{ storageMode, isManagedAllowed, tursoConfigured, r2Configured }`を返す。非メンバーは`404`。
+- `PATCH /projects/:id/storage` — body: `{ storageMode?, turso?: { url, authToken }, r2?: {...} }`。
+  渡したフィールドだけ更新する部分更新。`storageMode: 'managed'`は`isManagedAllowed`が
+  falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。
+
 ### 3.1 `GET /reports`
 一覧画面（テーブル/カンバン）用。
 

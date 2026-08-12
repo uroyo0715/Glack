@@ -12,6 +12,8 @@ export const {
   fetchProjectMembers,
   addProjectMembers,
   removeProjectMember,
+  fetchProjectStorageStatus,
+  updateProjectStorage,
   fetchReports,
   fetchReport,
   fetchReportFacets,

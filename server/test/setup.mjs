@@ -10,3 +10,6 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 
 process.env.GLANK_DB_PATH = path.join(os.tmpdir(), `glank-test-${process.pid}-${crypto.randomUUID()}.sqlite`)
+
+// self_hostedプロジェクトの接続情報の暗号化（server/src/crypto.js）に使う。テストごとに固定でよい。
+process.env.GLANK_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')

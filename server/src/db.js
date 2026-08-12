@@ -17,27 +17,22 @@ function resolveDbUrl() {
 const DB_URL = resolveDbUrl()
 export const isRemoteDb = /^(libsql|https?):\/\//.test(DB_URL)
 
+// Glankが自前で運用するコントロールプレーンDB（users/projects/sessions/projectMembers）。
+// プロジェクトのバグデータ自体は storageMode によって置き場所が変わる（projectDataAccess.js参照）:
+//  - 'managed'（Glankが提供する共有プラン）: このDBに projectId で相乗りする（従来通り）。
+//  - 'self_hosted'（チーム自前のTurso）: 別のDBに接続して同じスキーマを作る。
 export const db = createClient({
   url: DB_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
 
-await db.executeMultiple(`
-  CREATE TABLE IF NOT EXISTS users (
-    googleId TEXT PRIMARY KEY,
-    email TEXT NOT NULL,
-    displayName TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    imageUrl TEXT
-  );
-
+// bugs/bugInputsは「managedプランの共有DB（=このdb）」と「self_hostedプロジェクトが指す
+// 別DB」の両方に同じ形で作る必要があるため、スキーマをexportしてprojectDataAccess.jsから
+// self-hosted接続の初期化時にも使い回せるようにする。
+export const BUG_TABLES_SCHEMA = `
   CREATE TABLE IF NOT EXISTS bugs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    projectId INTEGER NOT NULL REFERENCES projects(id),
+    projectId INTEGER NOT NULL,
     title TEXT NOT NULL,
     tag TEXT NOT NULL,
     tagLabel TEXT NOT NULL,
@@ -48,6 +43,7 @@ await db.executeMultiple(`
     platform TEXT NOT NULL,
     frequency TEXT NOT NULL,
     videoUrl TEXT NOT NULL,
+    videoBytes INTEGER NOT NULL DEFAULT 0,
     fps INTEGER NOT NULL,
     durationFrames INTEGER NOT NULL
   );
@@ -60,6 +56,39 @@ await db.executeMultiple(`
     key TEXT NOT NULL,
     label TEXT NOT NULL,
     holdFrames INTEGER
+  );
+`
+
+await db.executeMultiple(`
+  CREATE TABLE IF NOT EXISTS users (
+    googleId TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    displayName TEXT NOT NULL
+  );
+
+  -- storageMode: 'self_hosted'（既定、チーム自前のTurso/R2。Glank側のコストはゼロ）
+  --            | 'managed'（Glankが用意した共有Turso/R2を使う有料プラン。isManagedAllowed=1のみ選択可）
+  -- tursoConfigEnc/r2ConfigEnc: self_hosted時の接続情報をAES-256-GCMで暗号化したJSON
+  -- （server/src/crypto.js）。未設定の間はNULL。
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    imageUrl TEXT,
+    storageMode TEXT NOT NULL DEFAULT 'self_hosted',
+    isManagedAllowed INTEGER NOT NULL DEFAULT 0,
+    tursoConfigEnc TEXT,
+    r2ConfigEnc TEXT
+  );
+
+  ${BUG_TABLES_SCHEMA}
+
+  -- バグのid(グローバル)→projectIdの索引。self_hostedプロジェクトはbugs/bugInputsが
+  -- チーム自前の別DBに置かれるため、「/reports/:id だけを見てどのDBに問い合わせればよいか」を
+  -- 判断できるよう、idの発行元と所属projectIdをコントロールプレーン側でこの表に持つ
+  -- （createBug時にここで採番したidをそのままbugs.idとして使う）。
+  CREATE TABLE IF NOT EXISTS bugIndex (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projectId INTEGER NOT NULL
   );
 
   -- セッションをインメモリで持つと、開発中の --watch 自動再起動のたびに
@@ -80,7 +109,57 @@ await db.executeMultiple(`
     addedAt TEXT NOT NULL,
     PRIMARY KEY (projectId, email)
   );
+
+  -- managedプラン（Glank共有のR2）の使用量トラッキング。プロジェクト単位500MB・全体8GBの
+  -- 上限チェックに使う（self_hostedプロジェクトはチーム自前のR2なのでここには乗らない）。
+  CREATE TABLE IF NOT EXISTS managedStorageUsage (
+    projectId INTEGER PRIMARY KEY REFERENCES projects(id),
+    bytesUsed INTEGER NOT NULL DEFAULT 0
+  );
 `)
+
+// マイグレーション: このカラム群を導入する前に作られたDBには存在しないため追加する。
+// 既存プロジェクトは「これまで通りGlankの単一DB/ローカルストレージを使う」動作を維持したいので、
+// 既定のself_hostedではなくmanaged相当（＝このDBに同居）として扱えるよう、
+// 実データがある既存プロジェクトはmanaged+isManagedAllowed=1に倒す。
+async function migrateAddStorageModeIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasStorageMode = columns.some((c) => c.name === 'storageMode')
+  if (hasStorageMode) return
+
+  await db.execute("ALTER TABLE projects ADD COLUMN storageMode TEXT NOT NULL DEFAULT 'self_hosted'")
+  await db.execute('ALTER TABLE projects ADD COLUMN isManagedAllowed INTEGER NOT NULL DEFAULT 0')
+  await db.execute('ALTER TABLE projects ADD COLUMN tursoConfigEnc TEXT')
+  await db.execute('ALTER TABLE projects ADD COLUMN r2ConfigEnc TEXT')
+  await db.execute("UPDATE projects SET storageMode = 'managed', isManagedAllowed = 1")
+}
+
+await migrateAddStorageModeIfNeeded()
+
+// マイグレーション: bugIndex導入前に作られたbugs（＝すべてこのDBに同居しているmanaged相当）を
+// 索引に登録する。idはbugs.idをそのまま使う（このDBがそのbugの実データの置き場所でもあるため）。
+async function migrateBackfillBugIndex() {
+  const { rows: missing } = await db.execute(
+    'SELECT id, projectId FROM bugs WHERE id NOT IN (SELECT id FROM bugIndex)'
+  )
+  for (const row of missing) {
+    await db.execute({
+      sql: 'INSERT INTO bugIndex (id, projectId) VALUES (?, ?)',
+      args: [row.id, row.projectId],
+    })
+  }
+}
+
+// マイグレーション: videoBytes導入前に作られたbugsには存在しないため追加する（既定0のまま。
+// 過去分の正確なサイズは分からないため、managed容量トラッキングは今後のアップロード分から効く）。
+async function migrateAddVideoBytesIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(bugs)')
+  const hasVideoBytes = columns.some((c) => c.name === 'videoBytes')
+  if (hasVideoBytes) return
+  await db.execute('ALTER TABLE bugs ADD COLUMN videoBytes INTEGER NOT NULL DEFAULT 0')
+}
+
+await migrateAddVideoBytesIfNeeded()
 
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。
@@ -347,3 +426,7 @@ async function seedIfEmpty() {
 }
 
 await seedIfEmpty()
+
+// シード投入後に実行する（シード分のbugsにもbugIndexの索引が要るため。シードはbugIndex経由の
+// 採番を使わず直接AUTOINCREMENTで入れているので、ここで後追いで登録する）。
+await migrateBackfillBugIndex()

@@ -1,10 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { db } from '../src/db.js'
+import { createManagedProject } from './helpers.js'
 import {
   createProject,
   listProjectsForUser,
   getProjectById,
   deleteProjects,
+  deleteAllBugsForProject,
   isProjectMember,
   listProjectMembers,
   addProjectMembers,
@@ -14,6 +17,7 @@ import {
   getBugById,
   listBugs,
   updateBugStatus,
+  resolveBugProjectId,
   findOrCreateUser,
   findUserByGoogleId,
   updateDisplayName,
@@ -104,12 +108,25 @@ test('deleteProjects also removes projectMembers rows (foreign key safety)', asy
   assert.equal(await getProjectById(project.id), null)
 })
 
-test('deleteProjects cascades to bugs and bugInputs, and leaves other projects untouched', async () => {
-  const toDelete = await createProject({ name: '削除対象', imageUrl: null, creatorEmail: 'owner@example.com' })
-  const untouched = await createProject({ name: '残す方', imageUrl: null, creatorEmail: 'owner@example.com' })
+test('deleteProjects ignores unknown ids without throwing', async () => {
+  const result = await deleteProjects([999999])
+  assert.deepEqual(result, { deletedProjectIds: [] })
+})
+
+test('deleteProjects with an empty array is a no-op', async () => {
+  const result = await deleteProjects([])
+  assert.deepEqual(result, { deletedProjectIds: [] })
+})
+
+// バグ報告自体の削除は、保存先DBがプロジェクトごとに変わりうる（storageMode）ため
+// data.jsのdeleteProjects()の責務ではなくなった。deleteAllBugsForProject()を
+// ルート側（projects.jsのDELETE /projects）が明示的に呼ぶ形になっている。
+test('deleteAllBugsForProject removes bugs/bugInputs for that project only, and reports deleted video URLs', async () => {
+  const toDelete = await createManagedProject({ name: '削除対象', imageUrl: null, creatorEmail: 'owner@example.com' })
+  const untouched = await createManagedProject({ name: '残す方', imageUrl: null, creatorEmail: 'owner@example.com' })
 
   const makeBug = (projectId) =>
-    createBug({
+    createBug(db, {
       projectId,
       title: 'title',
       tag: 'crash',
@@ -130,33 +147,21 @@ test('deleteProjects cascades to bugs and bugInputs, and leaves other projects u
 
   assert.equal((await getProjectById(toDelete.id)).bugCount, 1)
 
-  const result = await deleteProjects([toDelete.id])
-  assert.deepEqual(result.deletedProjectIds, [toDelete.id])
+  const result = await deleteAllBugsForProject(db, toDelete.id)
   assert.deepEqual(result.deletedVideoUrls, [bugToDelete.videoUrl])
 
-  assert.equal(await getProjectById(toDelete.id), null)
-  assert.equal(await getBugById(bugToDelete.id), null)
+  assert.equal(await getBugById(db, bugToDelete.id), null)
+  assert.equal(await resolveBugProjectId(bugToDelete.id), null) // bugIndexからも消える
 
   // 別プロジェクトのバグは無事
-  assert.ok(await getProjectById(untouched.id))
-  assert.ok(await getBugById(bugToKeep.id))
-})
-
-test('deleteProjects ignores unknown ids without throwing', async () => {
-  const result = await deleteProjects([999999])
-  assert.deepEqual(result, { deletedProjectIds: [], deletedVideoUrls: [] })
-})
-
-test('deleteProjects with an empty array is a no-op', async () => {
-  const result = await deleteProjects([])
-  assert.deepEqual(result, { deletedProjectIds: [], deletedVideoUrls: [] })
+  assert.ok(await getBugById(db, bugToKeep.id))
 })
 
 test('createBug persists full record including inputs, and listBugs scopes by projectId', async () => {
-  const project = await createProject({ name: 'バグ用プロジェクト', imageUrl: null, creatorEmail: 'owner@example.com' })
-  const other = await createProject({ name: '別プロジェクト', imageUrl: null, creatorEmail: 'owner@example.com' })
+  const project = await createManagedProject({ name: 'バグ用プロジェクト', imageUrl: null, creatorEmail: 'owner@example.com' })
+  const other = await createManagedProject({ name: '別プロジェクト', imageUrl: null, creatorEmail: 'owner@example.com' })
 
-  const bug = await createBug({
+  const bug = await createBug(db, {
     projectId: project.id,
     title: 'テストバグ',
     tag: 'crash',
@@ -182,20 +187,21 @@ test('createBug persists full record including inputs, and listBugs scopes by pr
     { frame: 10, key: 'B', label: '攻撃', holdFrames: 5 },
   ])
 
-  const fetched = await getBugById(bug.id)
+  const fetched = await getBugById(db, bug.id)
   assert.deepEqual(fetched, bug)
+  assert.equal(await resolveBugProjectId(bug.id), project.id)
 
-  const scoped = await listBugs({ projectId: project.id })
+  const scoped = await listBugs(db, { projectId: project.id })
   assert.ok(scoped.some((b) => b.id === bug.id))
 
-  const otherScoped = await listBugs({ projectId: other.id })
+  const otherScoped = await listBugs(db, { projectId: other.id })
   assert.ok(!otherScoped.some((b) => b.id === bug.id))
 })
 
 test('listBugs filters by status, tag, and q', async () => {
-  const project = await createProject({ name: 'フィルタ用', imageUrl: null, creatorEmail: 'owner@example.com' })
+  const project = await createManagedProject({ name: 'フィルタ用', imageUrl: null, creatorEmail: 'owner@example.com' })
   const make = (overrides) =>
-    createBug({
+    createBug(db, {
       projectId: project.id,
       title: 'ボスが壁を貫通する',
       tag: 'crash',
@@ -215,16 +221,16 @@ test('listBugs filters by status, tag, and q', async () => {
   await make({ tag: 'crash', title: 'クラッシュ報告' })
   await make({ tag: 'visual', title: '見た目がおかしい' })
 
-  const crashOnly = await listBugs({ projectId: project.id, tag: 'crash' })
+  const crashOnly = await listBugs(db, { projectId: project.id, tag: 'crash' })
   assert.ok(crashOnly.every((b) => b.tag === 'crash'))
 
-  const byTitle = await listBugs({ projectId: project.id, q: '見た目' })
+  const byTitle = await listBugs(db, { projectId: project.id, q: '見た目' })
   assert.ok(byTitle.every((b) => b.title.includes('見た目')))
 })
 
 test('updateBugStatus updates and returns the list-item shape', async () => {
-  const project = await createProject({ name: 'ステータス用', imageUrl: null, creatorEmail: 'owner@example.com' })
-  const bug = await createBug({
+  const project = await createManagedProject({ name: 'ステータス用', imageUrl: null, creatorEmail: 'owner@example.com' })
+  const bug = await createBug(db, {
     projectId: project.id,
     title: 'title',
     tag: 'crash',
@@ -240,11 +246,11 @@ test('updateBugStatus updates and returns the list-item shape', async () => {
     inputs: [],
   })
 
-  const updated = await updateBugStatus(bug.id, 'in_progress')
+  const updated = await updateBugStatus(db, bug.id, 'in_progress')
   assert.equal(updated.status, 'in_progress')
   assert.equal(updated.videoUrl, undefined) // list item shape: videoUrlは含まれない
 
-  const refetched = await getBugById(bug.id)
+  const refetched = await getBugById(db, bug.id)
   assert.equal(refetched.status, 'in_progress')
 })
 

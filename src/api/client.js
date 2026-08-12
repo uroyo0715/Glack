@@ -76,6 +76,41 @@ export async function removeProjectMember(projectId, email) {
   return res.json()
 }
 
+/** @returns {Promise<{storageMode: 'self_hosted' | 'managed', isManagedAllowed: boolean, tursoConfigured: boolean, r2Configured: boolean}>} */
+export async function fetchProjectStorageStatus(projectId) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage`, { credentials: 'include' })
+  if (!res.ok) throw new Error(`fetchProjectStorageStatus failed: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * self_hosted/managedの切り替えと接続情報の保存。turso/r2は変更する場合だけ渡す
+ * （省略したフィールドは変更されない。値はサーバー側で暗号化して保存され、二度と平文では返らない）。
+ * @returns {Promise<{storageMode, isManagedAllowed, tursoConfigured, r2Configured}>}
+ */
+export async function updateProjectStorage(projectId, { storageMode, turso, r2 } = {}) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ storageMode, turso, r2 }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `updateProjectStorage failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+// バックエンドが409 { error, code } で返す「このプロジェクトはまだストレージ未設定」を
+// フロント側で判別できるよう、エラーオブジェクトに code を載せて投げる共通ヘルパー。
+async function throwApiError(res, fallbackMessage) {
+  const body = await res.json().catch(() => ({}))
+  const err = new Error(body.error ?? fallbackMessage)
+  if (body.code) err.code = body.code
+  throw err
+}
+
 /** @returns {Promise<import('./types.js').BugListItem[]>} */
 export async function fetchReports(filters = {}) {
   const params = new URLSearchParams()
@@ -83,7 +118,7 @@ export async function fetchReports(filters = {}) {
     if (value != null && value !== '') params.set(key, value)
   }
   const res = await fetch(`${BASE_URL}/reports?${params}`, { credentials: 'include' })
-  if (!res.ok) throw new Error(`fetchReports failed: ${res.status}`)
+  if (!res.ok) await throwApiError(res, `fetchReports failed: ${res.status}`)
   return res.json()
 }
 
@@ -139,7 +174,7 @@ export async function deleteReport(id) {
  * @returns {Promise<{builds: string[], whos: string[]}>} */
 export async function fetchReportFacets(projectId) {
   const res = await fetch(`${BASE_URL}/reports/facets?projectId=${projectId}`, { credentials: 'include' })
-  if (!res.ok) throw new Error(`fetchReportFacets failed: ${res.status}`)
+  if (!res.ok) await throwApiError(res, `fetchReportFacets failed: ${res.status}`)
   return res.json()
 }
 
@@ -151,10 +186,7 @@ export async function createManualReport(projectId, fields) {
     credentials: 'include',
     body: JSON.stringify({ projectId, ...fields }),
   })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? `createManualReport failed: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, `createManualReport failed: ${res.status}`)
   return res.json()
 }
 

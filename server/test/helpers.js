@@ -1,6 +1,6 @@
 import { app } from '../src/app.js'
 import { createSession } from '../src/auth.js'
-import { findOrCreateUser } from '../src/data.js'
+import { findOrCreateUser, createProject, setProjectManagedAllowed, updateProjectStorageConfig } from '../src/data.js'
 
 let server
 let baseUrl
@@ -31,4 +31,16 @@ export async function createAuthCookie(overrides = {}) {
   })
   const token = await createSession(user.googleId)
   return { cookie: `glank_session=${token}`, user }
+}
+
+/**
+ * テスト用プロジェクトを作り、即座にmanagedプラン（Glankの共有DB=コントロールプレーンdb自体を
+ * バグデータの置き場所として使う）にしておく。新規プロジェクトの既定はself_hostedで、
+ * Turso接続情報が無いとバグ関連の操作が一切できないため、bugsを扱うテストはこれを使う。
+ */
+export async function createManagedProject(overrides = {}) {
+  const project = await createProject(overrides)
+  await setProjectManagedAllowed(project.id, true)
+  await updateProjectStorageConfig(project.id, { storageMode: 'managed' })
+  return project
 }

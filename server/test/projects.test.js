@@ -1,5 +1,8 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import os from 'node:os'
+import path from 'node:path'
+import crypto from 'node:crypto'
 import { startServer, stopServer, getBaseUrl, createAuthCookie } from './helpers.js'
 
 before(startServer)
@@ -231,4 +234,128 @@ test('DELETE /projects/:id/members refuses to remove the last remaining member',
     body: JSON.stringify({ email: owner.user.email }),
   })
   assert.equal(res.status, 400)
+})
+
+// --- ストレージ設定（self_hosted / managed） ---
+
+test('a new project defaults to storageMode self_hosted, unconfigured, and managed not allowed', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'ストレージ既定値テスト')
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    headers: { Cookie: owner.cookie },
+  })
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), {
+    storageMode: 'self_hosted',
+    isManagedAllowed: false,
+    tursoConfigured: false,
+    r2Configured: false,
+  })
+})
+
+test('GET /projects/:id/storage requires membership', async () => {
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'ストレージ非公開テスト')
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    headers: { Cookie: stranger.cookie },
+  })
+  assert.equal(res.status, 404)
+})
+
+test('self_hosted projects block bug creation until Turso/R2 are configured, then unblock', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'self_hosted設定テスト')
+
+  const missing = await fetch(`${getBaseUrl()}/reports/manual`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: project.id,
+      title: 'まだ設定前',
+      tag: 'crash',
+      desc: 'd',
+      who: 'w',
+      build: 'b',
+      platform: 'p',
+    }),
+  })
+  assert.equal(missing.status, 409)
+  const missingBody = await missing.json()
+  assert.equal(missingBody.code, 'turso_not_configured')
+
+  // @libsql/clientはfile: URLもTursoのURLも同じインターフェースで扱えるため、
+  // テストでは実際のTursoアカウントの代わりにローカルの一時ファイルを「self_hostedのTurso」として使う。
+  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-selfhosted-${crypto.randomUUID()}.sqlite`)}`
+  const patchRes = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turso: { url: tursoUrl, authToken: 'unused-for-local-file' } }),
+  })
+  assert.equal(patchRes.status, 200)
+  const status = await patchRes.json()
+  assert.equal(status.storageMode, 'self_hosted')
+  assert.equal(status.tursoConfigured, true)
+  assert.equal(status.r2Configured, false) // R2はまだ未設定（動画なしのmanual報告ならR2不要）
+
+  const created = await fetch(`${getBaseUrl()}/reports/manual`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: project.id,
+      title: '設定後の報告',
+      tag: 'crash',
+      desc: 'd',
+      who: 'w',
+      build: 'b',
+      platform: 'p',
+    }),
+  })
+  assert.equal(created.status, 201)
+  const bug = await created.json()
+  assert.equal(bug.title, '設定後の報告')
+
+  // 実際にチーム自前のDB（ここではローカルファイル）に書き込まれていることを確認
+  const detail = await fetch(`${getBaseUrl()}/reports/${bug.id}`, { headers: { Cookie: owner.cookie } })
+  assert.equal(detail.status, 200)
+})
+
+test('switching to managed requires isManagedAllowed', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'managed拒否テスト')
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storageMode: 'managed' }),
+  })
+  assert.equal(res.status, 403)
+})
+
+test('PATCH /projects/:id/storage validates turso/r2 field shapes', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'バリデーションテスト2')
+
+  const badMode = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storageMode: 'not-a-real-mode' }),
+  })
+  assert.equal(badMode.status, 400)
+
+  const badTurso = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turso: { url: '' } }),
+  })
+  assert.equal(badTurso.status, 400)
+
+  const badR2 = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ r2: { accountId: 'a' } }),
+  })
+  assert.equal(badR2.status, 400)
 })

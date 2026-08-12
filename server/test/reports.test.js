@@ -2,8 +2,7 @@ import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { startServer, stopServer, getBaseUrl, createAuthCookie } from './helpers.js'
-import { createProject } from '../src/data.js'
+import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
 
 const PROJECT_OWNER_EMAIL = 'reports-owner@example.com'
 let project
@@ -11,7 +10,7 @@ const uploadedFiles = []
 
 before(async () => {
   await startServer()
-  project = await createProject({ name: 'レポートテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+  project = await createManagedProject({ name: 'レポートテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
 })
 
 after(async () => {
@@ -237,7 +236,7 @@ test('PATCH /reports/:id rejects empty text fields and unknown frequency, but ac
 
 test('GET /reports/facets returns distinct build/who values used in the project', async () => {
   const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
-  const facetsProject = await createProject({ name: 'ファセットテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+  const facetsProject = await createManagedProject({ name: 'ファセットテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
 
   const first = await (await postReportForm({ projectId: facetsProject.id })).json()
   uploadedFiles.push(first.videoUrl)
