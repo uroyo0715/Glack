@@ -22,9 +22,9 @@ function loadStoredWidth() {
 const LOG_LAYOUT_STORAGE_KEY = 'glank-detail-log-layout'
 
 function loadStoredLogLayout() {
-  if (typeof window === 'undefined') return 'side'
+  if (typeof window === 'undefined') return 'below'
   const v = window.localStorage.getItem(LOG_LAYOUT_STORAGE_KEY)
-  return v === 'below' ? 'below' : 'side'
+  return v === 'side' ? 'side' : 'below'
 }
 
 export default function BugDetailPage({
@@ -241,7 +241,10 @@ export default function BugDetailPage({
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
         >
-          <div className="detail-resize-grip" />
+          <div className="detail-resize-grip">
+            <span className="detail-resize-grip-icon">⋮⋮</span>
+            <span className="detail-resize-grip-label">幅</span>
+          </div>
         </div>
       </div>
     </main>

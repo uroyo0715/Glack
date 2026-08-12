@@ -1001,7 +1001,7 @@ body {
 }
 .detail-content {
   position: relative;
-  padding-right: 14px;
+  padding-right: 26px;
 }
 .detail-content.resizing {
   user-select: none;
@@ -1011,23 +1011,43 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 26px;
   cursor: ew-resize;
   touch-action: none;
 }
 .detail-resize-grip {
-  width: 4px;
-  height: 48px;
-  border-radius: 4px;
-  background: var(--border);
-  transition: background 0.12s;
+  /* sticky にすることで、ページを下までスクロールしても常に視界内に留まる
+     （ハンドルの当たり判定自体はコンテンツ全高のまま、見た目だけ追従させる） */
+  position: sticky;
+  top: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 26px;
+  padding: 10px 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.detail-resize-grip-icon {
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -1px;
+  writing-mode: vertical-rl;
+}
+.detail-resize-grip-label {
+  font-size: 9px;
+  font-weight: 600;
+  writing-mode: vertical-rl;
 }
 .detail-resize-handle:hover .detail-resize-grip,
 .detail-content.resizing .detail-resize-grip {
   background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: var(--bg);
 }
 .header-top {
   display: flex;
