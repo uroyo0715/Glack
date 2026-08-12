@@ -12,7 +12,7 @@ import {
   getProjectRaw,
   isProjectMember,
   resolveTagLabel,
-  FREQUENCY_LABELS,
+  PRIORITY_LABELS,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveVideo, deleteFile } from '../storage.js'
@@ -121,22 +121,22 @@ router.patch(
     const existing = await getBugById(client, id)
     if (!existing) return res.status(404).json({ error: 'not found' })
 
-    const { status, title, tag, desc, who, build, platform, frequency } = req.body ?? {}
+    const { status, title, tag, desc, who, build, platform, priority } = req.body ?? {}
 
     const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
     if (emptyField) {
       return res.status(400).json({ error: `${emptyField} cannot be empty` })
     }
-    if (frequency != null && !FREQUENCY_LABELS[frequency]) {
-      return res.status(400).json({ error: `unknown frequency: ${frequency}` })
+    if (priority != null && !PRIORITY_LABELS[priority]) {
+      return res.status(400).json({ error: `unknown priority: ${priority}` })
     }
 
-    const hasFieldUpdates = [title, tag, desc, who, build, platform, frequency].some((v) => v != null)
+    const hasFieldUpdates = [title, tag, desc, who, build, platform, priority].some((v) => v != null)
 
     let updated
     if (status) updated = await updateBugStatus(client, id, status)
     if (hasFieldUpdates) {
-      updated = await updateBugFields(client, id, { title, tag, desc, who, build, platform, frequency })
+      updated = await updateBugFields(client, id, { title, tag, desc, who, build, platform, priority })
     }
     if (!updated) {
       const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing
@@ -177,9 +177,9 @@ router.post(
     if (!project) {
       return res.status(400).json({ error: `unknown projectId: ${metadata.projectId}` })
     }
-    const frequency = metadata.frequency || 'unknown'
-    if (!FREQUENCY_LABELS[frequency]) {
-      return res.status(400).json({ error: `unknown frequency: ${frequency}` })
+    const priority = metadata.priority || 'medium'
+    if (!PRIORITY_LABELS[priority]) {
+      return res.status(400).json({ error: `unknown priority: ${priority}` })
     }
     if (!req.file) {
       return res.status(400).json({ error: 'video file is required' })
@@ -210,7 +210,7 @@ router.post(
       who: metadata.who,
       build: metadata.build,
       platform: metadata.platform,
-      frequency,
+      priority,
       videoUrl,
       videoBytes: bytes,
       fps: metadata.fps,
@@ -236,9 +236,9 @@ router.post(
     if (!(await isProjectMember(Number(body.projectId), req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    const frequency = body.frequency || 'unknown'
-    if (!FREQUENCY_LABELS[frequency]) {
-      return res.status(400).json({ error: `unknown frequency: ${frequency}` })
+    const priority = body.priority || 'medium'
+    if (!PRIORITY_LABELS[priority]) {
+      return res.status(400).json({ error: `unknown priority: ${priority}` })
     }
 
     const resolved = await requireProjectDbClient(res, Number(body.projectId))
@@ -253,7 +253,7 @@ router.post(
       who: body.who,
       build: body.build,
       platform: body.platform,
-      frequency,
+      priority,
       videoUrl: '', // 動画なし。フロント側は空文字を「録画なし」として扱う
       fps: 0,
       durationFrames: 0,

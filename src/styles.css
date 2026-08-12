@@ -1,15 +1,24 @@
 :root {
-  --bg: #0f1620;
-  --surface: #161f2c;
-  --surface-2: #1f2a3b;
-  --surface-3: #263347;
-  --text: #e8ecf1;
-  --text-dim: #8b99ac;
-  --text-faint: #56637a;
-  --accent-amber: #f2a93b;
-  --accent-cyan: #4fd1c5;
-  --accent-red: #e5636b;
-  --border: #2a3648;
+  /* 暖色寄りのチャコール。よくある「紺〜黒のダークSaaS」配色から離すために、
+     青みの強い--bg/--surfaceを廃止して中立〜暖色のグレーに寄せている。 */
+  --bg: #17140f;
+  --surface: #1e1a14;
+  --surface-2: #27221a;
+  --surface-3: #332c21;
+  --text: #ece6dc;
+  --text-dim: #a89a87;
+  --text-faint: #6d6152;
+  /* UI全体で使う操作系アクセント（ボタン・リンク・再生バー等）。種類（tag）の配色にも使うが、
+     「対応状況（status）」は意味の異なる軸なので、こちらとは別の--status-*トークンを使う
+     （同じ3色をtag/status/chipすべてに使い回さない）。 */
+  --accent-amber: #d99a4f;
+  --accent-cyan: #5ba39a;
+  --accent-red: #c1615a;
+  /* 対応状況（status）専用のアクセント。tagの配色と重複させない。 */
+  --status-progress: #6d93c9;
+  --status-review: #c97b3f;
+  --status-done: #7fae7a;
+  --border: #362d21;
   --radius: 10px;
 }
 
@@ -738,10 +747,10 @@ body {
   background: var(--text-faint);
 }
 .storage-status-badge.ok {
-  color: #6fcf97;
+  color: var(--status-done);
 }
 .storage-status-badge.ok::before {
-  background: #6fcf97;
+  background: var(--status-done);
 }
 .storage-config-form input {
   font-family: inherit;
@@ -765,6 +774,53 @@ body {
   cursor: pointer;
 }
 .storage-config-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- 選択肢の管理（種類・優先度・プラットフォームのプリセット非表示設定） ---- */
+.field-options-panel {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.field-options-group {
+  margin-top: 14px;
+}
+.field-options-group-label {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.field-options-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.field-option-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.field-option-chip:hover {
+  border-color: var(--text-dim);
+}
+.field-option-chip.hidden {
+  color: var(--text-faint);
+  text-decoration: line-through;
+  border-style: dashed;
+}
+.field-option-chip:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -972,17 +1028,17 @@ body {
 .chip.tag-chip.crash.active {
   border-color: var(--accent-red);
   color: var(--accent-red);
-  background: rgba(229, 99, 107, 0.12);
+  background: rgba(193, 97, 90, 0.12);
 }
 .chip.tag-chip.visual.active {
   border-color: var(--accent-cyan);
   color: var(--accent-cyan);
-  background: rgba(79, 209, 197, 0.12);
+  background: rgba(91, 163, 154, 0.12);
 }
 .chip.tag-chip.softlock.active {
   border-color: var(--accent-amber);
   color: var(--accent-amber);
-  background: rgba(242, 169, 59, 0.12);
+  background: rgba(217, 154, 79, 0.12);
 }
 .result-count {
   margin-left: auto;
@@ -1032,7 +1088,7 @@ body {
   white-space: nowrap;
 }
 .bug-row .col-who,
-.bug-row .col-freq {
+.bug-row .col-priority {
   color: var(--text-dim);
 }
 .table-empty {
@@ -1054,16 +1110,16 @@ body {
   color: var(--text-dim);
 }
 .status-badge.in_progress {
-  border-color: var(--accent-cyan);
-  color: var(--accent-cyan);
+  border-color: var(--status-progress);
+  color: var(--status-progress);
 }
 .status-badge.review {
-  border-color: var(--accent-amber);
-  color: var(--accent-amber);
+  border-color: var(--status-review);
+  color: var(--status-review);
 }
 .status-badge.done {
-  border-color: #6fcf97;
-  color: #6fcf97;
+  border-color: var(--status-done);
+  color: var(--status-done);
 }
 
 .kanban {
@@ -1322,8 +1378,8 @@ body {
 .video-fake {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 30% 40%, rgba(79, 209, 197, 0.1), transparent 55%),
-    radial-gradient(circle at 70% 65%, rgba(242, 169, 59, 0.08), transparent 50%), #0a0f16;
+  background: radial-gradient(circle at 30% 40%, rgba(91, 163, 154, 0.1), transparent 55%),
+    radial-gradient(circle at 70% 65%, rgba(217, 154, 79, 0.08), transparent 50%), #0d0b08;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1404,7 +1460,7 @@ body {
 .scrub.dragging .handle {
   width: 14px;
   height: 14px;
-  box-shadow: 0 0 0 4px rgba(0, 220, 255, 0.2);
+  box-shadow: 0 0 0 4px rgba(91, 163, 154, 0.25);
 }
 .time {
   font-size: 11.5px;
@@ -1539,7 +1595,7 @@ body {
   color: var(--text);
 }
 .input-glyph.hit {
-  background: rgba(242, 169, 59, 0.18);
+  background: rgba(217, 154, 79, 0.18);
   border-color: var(--accent-amber);
   color: var(--accent-amber);
   transform: translate(-50%, -50%) scale(1.15);
@@ -1613,7 +1669,7 @@ body {
   background: var(--surface-2);
 }
 .log-text-row.hit {
-  background: rgba(242, 169, 59, 0.12);
+  background: rgba(217, 154, 79, 0.12);
   color: var(--text);
 }
 .log-text-empty {

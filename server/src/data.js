@@ -6,12 +6,10 @@ export const TAG_LABELS = {
   softlock: 'SOFTLOCK',
 }
 
-export const FREQUENCY_LABELS = {
-  rare: 'まれ',
-  sometimes: 'たまに',
-  often: '再現しやすい',
-  always: '毎回',
-  unknown: '再現条件不明',
+export const PRIORITY_LABELS = {
+  high: '高',
+  medium: '中',
+  low: '低',
 }
 
 // 種類（tag）はcrash/visual/softlockのプリセットに加えて自由記述も許可する。
@@ -32,7 +30,7 @@ function rowToListItem(row) {
     who: row.who,
     build: row.build,
     platform: row.platform,
-    frequency: row.frequency,
+    priority: row.priority,
   }
 }
 
@@ -129,7 +127,7 @@ export async function updateBugStatus(client, id, status) {
 
 // 動画・入力ログ以外の報告メタデータ（タイトル・ビルドバージョン等）は報告後も編集できる。
 // 渡されたフィールドだけを更新する（部分更新）。
-export async function updateBugFields(client, id, { title, tag, desc, who, build, platform, frequency } = {}) {
+export async function updateBugFields(client, id, { title, tag, desc, who, build, platform, priority } = {}) {
   const sets = []
   const args = []
   if (title != null) {
@@ -156,9 +154,9 @@ export async function updateBugFields(client, id, { title, tag, desc, who, build
     sets.push('platform = ?')
     args.push(platform)
   }
-  if (frequency != null) {
-    sets.push('frequency = ?')
-    args.push(frequency)
+  if (priority != null) {
+    sets.push('priority = ?')
+    args.push(priority)
   }
   if (sets.length > 0) {
     args.push(id)
@@ -210,7 +208,7 @@ export async function createBug(client, {
   who,
   build,
   platform,
-  frequency,
+  priority,
   videoUrl,
   videoBytes,
   fps,
@@ -229,7 +227,7 @@ export async function createBug(client, {
   try {
     await tx.execute({
       sql: `INSERT INTO bugs
-          (id, projectId, title, tag, tagLabel, status, description, who, build, platform, frequency, videoUrl, videoBytes, fps, durationFrames)
+          (id, projectId, title, tag, tagLabel, status, description, who, build, platform, priority, videoUrl, videoBytes, fps, durationFrames)
          VALUES (?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         bugId,
@@ -241,7 +239,7 @@ export async function createBug(client, {
         who,
         build,
         platform,
-        frequency,
+        priority,
         videoUrl,
         videoBytes ?? 0,
         fps,
@@ -300,12 +298,26 @@ export async function deleteAllBugsForProject(client, projectId) {
 
 // --- プロジェクト・ユーザー・セッション（コントロールプレーン）。常にGlank自前のdb（db.js）を使う。
 
+function parseHiddenFieldOptions(raw) {
+  try {
+    const parsed = JSON.parse(raw ?? '{}')
+    return {
+      tag: Array.isArray(parsed.tag) ? parsed.tag : [],
+      priority: Array.isArray(parsed.priority) ? parsed.priority : [],
+      platform: Array.isArray(parsed.platform) ? parsed.platform : [],
+    }
+  } catch {
+    return { tag: [], priority: [], platform: [] }
+  }
+}
+
 function rowToProject(row) {
   return {
     id: Number(row.id),
     name: row.name,
     imageUrl: row.imageUrl,
     bugCount: Number(row.bugCount),
+    hiddenFieldOptions: parseHiddenFieldOptions(row.hiddenFieldOptions),
   }
 }
 
@@ -377,6 +389,24 @@ export async function updateProjectStorageConfig(
   args.push(id)
   await db.execute({ sql: `UPDATE projects SET ${sets.join(', ')} WHERE id = ?`, args })
   return getProjectRaw(id)
+}
+
+/**
+ * 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは使わないプリセット項目を
+ * 非表示にする設定を保存する。プロジェクトメンバー全員に共通で反映される。
+ * @param {{tag?: string[], priority?: string[], platform?: string[]}} hiddenFieldOptions
+ */
+export async function updateProjectFieldOptions(id, hiddenFieldOptions) {
+  const current = await getProjectById(id)
+  const merged = {
+    ...current.hiddenFieldOptions,
+    ...hiddenFieldOptions,
+  }
+  await db.execute({
+    sql: 'UPDATE projects SET hiddenFieldOptions = ? WHERE id = ?',
+    args: [JSON.stringify(merged), id],
+  })
+  return getProjectById(id)
 }
 
 /** 将来の課金判定用フラグ。今は決済機能がないため手動で切り替える（server/scripts/set-managed-allowed.mjs）。 */

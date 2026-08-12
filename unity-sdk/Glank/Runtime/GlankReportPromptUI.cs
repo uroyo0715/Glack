@@ -21,13 +21,14 @@ namespace Glank
         [Tooltip("選択肢の並び順は0:crash 1:visual 2:softlock を想定")]
         [SerializeField] private Dropdown tagDropdown;
         [SerializeField] private InputField descField;
-        [Tooltip("選択肢の並び順は0:rare 1:sometimes 2:often 3:always 4:unknown を想定")]
-        [SerializeField] private Dropdown frequencyDropdown;
+        [Tooltip("選択肢の並び順は0:high 1:medium 2:low を想定")]
+        [SerializeField] private Dropdown priorityDropdown;
         [SerializeField] private Button submitButton;
         [SerializeField] private Button cancelButton;
 
         private static readonly string[] TagValues = { "crash", "visual", "softlock" };
-        private static readonly string[] FrequencyValues = { "rare", "sometimes", "often", "always", "unknown" };
+        private static readonly string[] PriorityValues = { "high", "medium", "low" };
+        private const int DefaultPriorityIndex = 1; // medium
 
         private void Awake()
         {
@@ -64,9 +65,9 @@ namespace Glank
                 : "(no title)";
             string tag = TagValues[Mathf.Clamp(tagDropdown != null ? tagDropdown.value : 0, 0, TagValues.Length - 1)];
             string desc = descField != null ? descField.text : "";
-            string frequency = FrequencyValues[Mathf.Clamp(
-                frequencyDropdown != null ? frequencyDropdown.value : FrequencyValues.Length - 1,
-                0, FrequencyValues.Length - 1)];
+            string priority = PriorityValues[Mathf.Clamp(
+                priorityDropdown != null ? priorityDropdown.value : DefaultPriorityIndex,
+                0, PriorityValues.Length - 1)];
 
             trigger.SubmitReport(
                 title: title,
@@ -75,7 +76,7 @@ namespace Glank
                 who: SystemInfo.deviceName,
                 build: Application.version,
                 platform: Application.platform.ToString(),
-                frequency: frequency);
+                priority: priority);
 
             Hide();
         }

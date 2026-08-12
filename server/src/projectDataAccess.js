@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client'
-import { db, BUG_TABLES_SCHEMA } from './db.js'
+import { db, BUG_TABLES_SCHEMA, migrateFrequencyToPriority } from './db.js'
 import { encryptJson, decryptJson } from './crypto.js'
 
 // managedプラン（Glank共有）のR2設定。self_hostedプロジェクトが未設定の間の
@@ -47,6 +47,7 @@ export async function resolveProjectDbClient(project) {
   const { url, authToken } = decryptJson(project.tursoConfigEnc)
   const client = createClient({ url, authToken })
   await client.executeMultiple(BUG_TABLES_SCHEMA)
+  await migrateFrequencyToPriority(client)
   clientCache.set(project.id, { configEnc: project.tursoConfigEnc, client })
   return { ready: true, client }
 }

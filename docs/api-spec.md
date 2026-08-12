@@ -29,7 +29,7 @@ interface Bug {
   who: string            // 報告者 or QA担当者
   build: string          // e.g. "0.14.2-dev"
   platform: string       // e.g. "PC (Steam)"
-  frequency: FrequencyLevel
+  priority: PriorityLevel
   createdAt: string      // ISO8601
 
   videoUrl: string       // アップロード済み動画のURL（現状はAPIサーバーの/uploads配下。保存先はserver/src/storage.jsで抽象化）
@@ -38,9 +38,9 @@ interface Bug {
   inputs: InputLogEntry[]
 }
 
-type FrequencyLevel = 'rare' | 'sometimes' | 'often' | 'always' | 'unknown'
-// rare: まれ / sometimes: たまに / often: 再現しやすい / always: 毎回 / unknown: 再現条件不明
-// ラベル定義は server/src/data.js の FREQUENCY_LABELS、フロントは src/data/mockBugs.js の FREQUENCY_OPTIONS
+type PriorityLevel = 'high' | 'medium' | 'low'
+// high: 高 / medium: 中 / low: 低
+// ラベル定義は server/src/data.js の PRIORITY_LABELS、フロントは src/data/mockBugs.js の PRIORITY_OPTIONS
 ```
 
 ### 2.2 InputLogEntry（フレームデータ）
@@ -110,7 +110,8 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
 `GET/PATCH /reports*`系も同様にプロジェクト単位のメンバーシップでガードされる。
 
 - `GET /projects` — 自分がメンバーのプロジェクトだけを返す。各要素は
-  `{ id, name, imageUrl, bugCount }`（`bugCount`はそのプロジェクトに紐づくバグ報告数）。
+  `{ id, name, imageUrl, bugCount, hiddenFieldOptions }`（`bugCount`はそのプロジェクトに紐づく
+  バグ報告数、`hiddenFieldOptions`は3.0.7参照）。
 - `POST /projects` — `multipart/form-data`。`name`（必須）と`image`（任意、ティザー画像）を受け取り、
   作成したプロジェクトを`201`で返す。作成者は自動的にそのプロジェクトのメンバーになる。
 - `DELETE /projects` — body: `{ ids: number[] }`。指定したプロジェクトと、配下の全バグ報告・
@@ -142,6 +143,17 @@ DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由�
 - `PATCH /projects/:id/storage` — body: `{ storageMode?, turso?: { url, authToken }, r2?: {...} }`。
   渡したフィールドだけ更新する部分更新。`storageMode: 'managed'`は`isManagedAllowed`が
   falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。
+
+#### 3.0.7 選択肢の管理（種類・優先度・プラットフォームのプリセット非表示）
+
+種類（`tag`）・優先度（`priority`）・プラットフォームはプリセットの選択肢を持つが、
+プロジェクト（＝ゲーム）ごとに使わない項目（例: 種類の`CRASH`）を報告フォームの
+プルダウンから隠せる。設定はプロジェクト単位でメンバー全員に共通で反映され、
+既存の報告データ自体は変更しない（隠した値を持つ既存の報告は表示上そのまま見える）。
+
+- `PATCH /projects/:id/field-options` — body: `{ tag?: string[], priority?: string[], platform?: string[] }`
+  （非表示にするプリセットのvalue一覧）。渡したフィールドだけ更新する部分更新。
+  レスポンスは更新後の`{ tag, priority, platform }`。非メンバーは`404`。
 
 ### 3.1 `GET /reports`
 一覧画面（テーブル/カンバン）用。
@@ -190,7 +202,7 @@ interface PatchReportBody {
   who?: string
   build?: string
   platform?: string
-  frequency?: FrequencyLevel
+  priority?: PriorityLevel
 }
 ```
 例（ステータス変更のみ）:
@@ -203,7 +215,7 @@ interface PatchReportBody {
 ```
 
 `title`/`tag`/`desc`/`who`/`build`/`platform`を空文字で渡した場合は`400`。
-`frequency`は未知の値だと`400`（`tag`はプリセット以外の自由記述も許可するため値のチェックはしない）。
+`priority`は未知の値だと`400`（`tag`はプリセット以外の自由記述も許可するため値のチェックはしない）。
 
 Response: 更新後の`BugListItem`。
 
@@ -227,7 +239,7 @@ interface ReportMetadata {
   who: string
   build: string
   platform: string
-  frequency?: FrequencyLevel // 省略時は 'unknown' 扱い
+  priority?: PriorityLevel // 省略時は 'medium' 扱い
   fps: number
   durationFrames: number
   inputs: InputLogEntry[]
@@ -254,7 +266,7 @@ interface ManualReportBody {
   who: string
   build: string
   platform: string
-  frequency?: FrequencyLevel // 省略時は 'unknown' 扱い
+  priority?: PriorityLevel // 省略時は 'medium' 扱い
 }
 ```
 

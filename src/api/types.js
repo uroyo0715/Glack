@@ -22,7 +22,7 @@
  * @property {string} who
  * @property {string} build
  * @property {string} platform
- * @property {string} frequency
+ * @property {string} priority
  */
 
 /**

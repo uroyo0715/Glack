@@ -359,3 +359,58 @@ test('PATCH /projects/:id/storage validates turso/r2 field shapes', async () => 
   })
   assert.equal(badR2.status, 400)
 })
+
+test('new project defaults to no hidden field options', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'フィールド設定テスト')
+  assert.deepEqual(project.hiddenFieldOptions, { tag: [], priority: [], platform: [] })
+})
+
+test('PATCH /projects/:id/field-options requires membership', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'フィールド設定権限テスト')
+  const stranger = await createAuthCookie()
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/field-options`, {
+    method: 'PATCH',
+    headers: { Cookie: stranger.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag: ['crash'] }),
+  })
+  assert.equal(res.status, 404)
+})
+
+test('PATCH /projects/:id/field-options hides preset options per project, and rejects unknown fields', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'フィールド設定テスト2')
+
+  const bad = await fetch(`${getBaseUrl()}/projects/${project.id}/field-options`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notAField: [] }),
+  })
+  assert.equal(bad.status, 400)
+
+  const badShape = await fetch(`${getBaseUrl()}/projects/${project.id}/field-options`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag: 'crash' }),
+  })
+  assert.equal(badShape.status, 400)
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/field-options`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag: ['crash'] }),
+  })
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), { tag: ['crash'], priority: [], platform: [] })
+
+  // 部分更新: 他のフィールドは維持される
+  const res2 = await fetch(`${getBaseUrl()}/projects/${project.id}/field-options`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priority: ['low'] }),
+  })
+  assert.equal(res2.status, 200)
+  assert.deepEqual(await res2.json(), { tag: ['crash'], priority: ['low'], platform: [] })
+})

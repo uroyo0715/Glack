@@ -41,7 +41,7 @@ export const BUG_TABLES_SCHEMA = `
     who TEXT NOT NULL,
     build TEXT NOT NULL,
     platform TEXT NOT NULL,
-    frequency TEXT NOT NULL,
+    priority TEXT NOT NULL,
     videoUrl TEXT NOT NULL,
     videoBytes INTEGER NOT NULL DEFAULT 0,
     fps INTEGER NOT NULL,
@@ -70,6 +70,9 @@ await db.executeMultiple(`
   --            | 'managed'（Glankが用意した共有Turso/R2を使う有料プラン。isManagedAllowed=1のみ選択可）
   -- tursoConfigEnc/r2ConfigEnc: self_hosted時の接続情報をAES-256-GCMで暗号化したJSON
   -- （server/src/crypto.js）。未設定の間はNULL。
+  -- hiddenFieldOptions: 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは
+  -- 使わないプリセット項目を非表示にするための設定（JSON: {"tag": [...], "priority": [...], "platform": [...]}）。
+  -- 既存の報告データがそのプリセット値を使っていても、表示上隠すだけでデータ自体は変更しない。
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -77,7 +80,8 @@ await db.executeMultiple(`
     storageMode TEXT NOT NULL DEFAULT 'self_hosted',
     isManagedAllowed INTEGER NOT NULL DEFAULT 0,
     tursoConfigEnc TEXT,
-    r2ConfigEnc TEXT
+    r2ConfigEnc TEXT,
+    hiddenFieldOptions TEXT NOT NULL DEFAULT '{}'
   );
 
   ${BUG_TABLES_SCHEMA}
@@ -161,6 +165,47 @@ async function migrateAddVideoBytesIfNeeded() {
 
 await migrateAddVideoBytesIfNeeded()
 
+// マイグレーション: 「発生頻度」(frequency: rare/sometimes/often/always/unknown)を
+// 「優先度」(priority: high/medium/low)に置き換える。列名をリネームしたうえで、
+// 既存データは以下のマッピングで自動変換する:
+//   always/often → high, sometimes → medium, rare/unknown → low
+// 新規に作られるDBは最初からpriority列を持つ（frequency列が存在しない）ため、
+// このマイグレーションはfrequency列が残っている既存DBに対してのみ実行される。
+// self_hostedプロジェクトの別DBに対しても同じ変換が要るため、projectDataAccess.jsの
+// 接続確立時にも呼び出せるようexportする。
+const FREQUENCY_TO_PRIORITY = {
+  always: 'high',
+  often: 'high',
+  sometimes: 'medium',
+  rare: 'low',
+  unknown: 'low',
+}
+
+export async function migrateFrequencyToPriority(client) {
+  const { rows: columns } = await client.execute('PRAGMA table_info(bugs)')
+  const hasFrequency = columns.some((c) => c.name === 'frequency')
+  if (!hasFrequency) return
+  const hasPriority = columns.some((c) => c.name === 'priority')
+  if (!hasPriority) {
+    await client.execute('ALTER TABLE bugs RENAME COLUMN frequency TO priority')
+  }
+  for (const [from, to] of Object.entries(FREQUENCY_TO_PRIORITY)) {
+    await client.execute({ sql: 'UPDATE bugs SET priority = ? WHERE priority = ?', args: [to, from] })
+  }
+}
+
+await migrateFrequencyToPriority(db)
+
+// マイグレーション: hiddenFieldOptions導入前に作られたDBには存在しないため追加する。
+async function migrateAddHiddenFieldOptionsIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasColumn = columns.some((c) => c.name === 'hiddenFieldOptions')
+  if (hasColumn) return
+  await db.execute("ALTER TABLE projects ADD COLUMN hiddenFieldOptions TEXT NOT NULL DEFAULT '{}'")
+}
+
+await migrateAddHiddenFieldOptionsIfNeeded()
+
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。
 async function migrateAddProjectIdIfNeeded() {
@@ -218,7 +263,7 @@ const SEED_BUGS = [
     who: 'tanaka_qa',
     build: '0.14.2-dev',
     platform: 'PC (Steam)',
-    frequency: 'rare',
+    priority: 'low',
     videoUrl: '/uploads/seed-1.mp4',
     fps: 60,
     durationFrames: 252,
@@ -240,7 +285,7 @@ const SEED_BUGS = [
     who: 'yamada_dev',
     build: '0.14.1-dev',
     platform: 'PC (Steam)',
-    frequency: 'often',
+    priority: 'high',
     videoUrl: '/uploads/seed-2.mp4',
     fps: 60,
     durationFrames: 156,
@@ -260,7 +305,7 @@ const SEED_BUGS = [
     who: 'sato_playtest',
     build: '0.13.9-dev',
     platform: 'Switch',
-    frequency: 'unknown',
+    priority: 'low',
     videoUrl: '/uploads/seed-3.mp4',
     fps: 60,
     durationFrames: 300,
@@ -280,7 +325,7 @@ const SEED_BUGS = [
     who: 'tanaka_qa',
     build: '0.14.0-dev',
     platform: 'PC (Steam)',
-    frequency: 'always',
+    priority: 'high',
     videoUrl: '/uploads/seed-4.mp4',
     fps: 60,
     durationFrames: 108,
@@ -299,7 +344,7 @@ const SEED_BUGS = [
     who: 'yamada_dev',
     build: '0.14.2-dev',
     platform: 'PC (Steam)',
-    frequency: 'often',
+    priority: 'high',
     videoUrl: '/uploads/seed-5.mp4',
     fps: 60,
     durationFrames: 126,
@@ -317,7 +362,7 @@ const SEED_BUGS = [
     who: 'sato_playtest',
     build: '0.14.1-dev',
     platform: 'PC (Steam)',
-    frequency: 'rare',
+    priority: 'low',
     videoUrl: '/uploads/seed-6.mp4',
     fps: 60,
     durationFrames: 204,
@@ -335,7 +380,7 @@ const SEED_BUGS = [
     who: 'tanaka_qa',
     build: '0.14.2-dev',
     platform: 'Switch',
-    frequency: 'rare',
+    priority: 'low',
     videoUrl: '/uploads/seed-7.mp4',
     fps: 60,
     durationFrames: 276,
@@ -354,7 +399,7 @@ const SEED_BUGS = [
     who: 'yamada_dev',
     build: '0.14.0-dev',
     platform: 'PC (Steam)',
-    frequency: 'always',
+    priority: 'high',
     videoUrl: '/uploads/seed-8.mp4',
     fps: 60,
     durationFrames: 120,
@@ -369,7 +414,7 @@ const SEED_BUGS = [
     who: 'sato_playtest',
     build: '0.13.8-dev',
     platform: 'Switch',
-    frequency: 'always',
+    priority: 'high',
     videoUrl: '/uploads/seed-9.mp4',
     fps: 60,
     durationFrames: 96,
@@ -395,7 +440,7 @@ async function seedIfEmpty() {
   for (const seedBug of SEED_BUGS) {
     const bugResult = await db.execute({
       sql: `INSERT INTO bugs
-          (projectId, title, tag, tagLabel, status, description, who, build, platform, frequency, videoUrl, fps, durationFrames)
+          (projectId, title, tag, tagLabel, status, description, who, build, platform, priority, videoUrl, fps, durationFrames)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         projectId,
@@ -407,7 +452,7 @@ async function seedIfEmpty() {
         seedBug.who,
         seedBug.build,
         seedBug.platform,
-        seedBug.frequency,
+        seedBug.priority,
         seedBug.videoUrl,
         seedBug.fps,
         seedBug.durationFrames,

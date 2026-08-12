@@ -16,7 +16,7 @@ namespace Glank
         public string who;
         public string build;
         public string platform;
-        public string frequency; // "rare" | "sometimes" | "often" | "always" | "unknown"（省略/空文字はサーバー側で"unknown"扱い）
+        public string priority; // "high" | "medium" | "low"（省略/空文字はサーバー側で"medium"扱い）
         public int fps;
         public int durationFrames;
         public InputLogEntryDto[] inputs;

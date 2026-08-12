@@ -143,7 +143,7 @@ Canvas
    ├─ TitleInputField（InputField）      → titleField
    ├─ TagDropdown（Dropdown。選択肢: crash / visual / softlock の順） → tagDropdown
    ├─ DescInputField（InputField, Multi Line） → descField
-   ├─ FrequencyDropdown（Dropdown。選択肢: rare / sometimes / often / always / unknown の順） → frequencyDropdown
+   ├─ PriorityDropdown（Dropdown。選択肢: high / medium / low の順） → priorityDropdown
    ├─ SubmitButton（Button）             → submitButton
    └─ CancelButton（Button）             → cancelButton
 ```

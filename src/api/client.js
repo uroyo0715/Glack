@@ -102,6 +102,25 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
   return res.json()
 }
 
+/**
+ * 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは使わないプリセット項目を
+ * 非表示にする設定。渡さなかったフィールドは変更しない（部分更新）。
+ * @returns {Promise<{tag: string[], priority: string[], platform: string[]}>}
+ */
+export async function updateProjectFieldOptions(projectId, fieldOptions) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/field-options`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(fieldOptions),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `updateProjectFieldOptions failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 // バックエンドが409 { error, code } で返す「このプロジェクトはまだストレージ未設定」を
 // フロント側で判別できるよう、エラーオブジェクトに code を載せて投げる共通ヘルパー。
 async function throwApiError(res, fallbackMessage) {

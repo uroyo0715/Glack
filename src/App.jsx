@@ -13,6 +13,7 @@ import {
   removeProjectMember,
   fetchProjectStorageStatus,
   updateProjectStorage,
+  updateProjectFieldOptions,
   fetchReports,
   fetchReport,
   fetchReportFacets,
@@ -316,6 +317,15 @@ export default function App() {
     })
   }
 
+  function handleUpdateFieldOptions(projectId, fieldOptions) {
+    return updateProjectFieldOptions(projectId, fieldOptions).then((result) => {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, hiddenFieldOptions: result } : p))
+      )
+      return result
+    })
+  }
+
   function handleRemoveMember(projectId, email) {
     return removeProjectMember(projectId, email).then((result) => {
       const isSelf = user && String(email).trim().toLowerCase() === user.email.trim().toLowerCase()
@@ -444,6 +454,7 @@ export default function App() {
               onUpdateReport={handleUpdateReport}
               onDeleteReport={handleDeleteReport}
               buildOptions={reportFacets.builds}
+              hiddenFieldOptions={selectedProject?.hiddenFieldOptions}
               onFetchMembers={fetchProjectMembers}
             />
           )
@@ -474,6 +485,8 @@ export default function App() {
           storageStatus={storageStatus}
           onFetchStorageStatus={fetchProjectStorageStatus}
           onUpdateStorage={handleUpdateStorage}
+          hiddenFieldOptions={selectedProject?.hiddenFieldOptions}
+          onUpdateFieldOptions={(patch) => handleUpdateFieldOptions(selectedProjectId, patch)}
           query={query}
           setQuery={setQuery}
           statusFilter={statusFilter}

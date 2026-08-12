@@ -1,8 +1,8 @@
-import { bugs as seedBugs, TAG_OPTIONS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+import { bugs as seedBugs, TAG_OPTIONS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
 import { projects as seedProjects } from '../data/mockProjects.js'
 
 const TAG_LABELS = Object.fromEntries(TAG_OPTIONS.map((t) => [t.key, t.label]))
-const FREQUENCY_KEYS = new Set(FREQUENCY_OPTIONS.map((f) => f.key))
+const PRIORITY_KEYS = new Set(PRIORITY_OPTIONS.map((p) => p.key))
 // 種類（tag）はプリセット以外の自由記述も許可する（サーバーのresolveTagLabelと同じ挙動）
 const resolveTagLabel = (tag) => TAG_LABELS[tag] ?? tag
 
@@ -27,6 +27,11 @@ const storageByProject = new Map(
     p.id,
     { storageMode: 'managed', isManagedAllowed: true, tursoConfigured: true, r2Configured: true },
   ])
+)
+
+// projectId -> { tag: string[], priority: string[], platform: string[] }。非表示にしたプリセット項目。
+const fieldOptionsByProject = new Map(
+  projects.map((p) => [p.id, { tag: [], priority: [], platform: [] }])
 )
 
 function requireStorageReady(projectId) {
@@ -87,6 +92,7 @@ export async function fetchProjects() {
   return projects.map((p) => ({
     ...p,
     bugCount: bugs.filter((b) => b.projectId === p.id).length,
+    hiddenFieldOptions: fieldOptionsByProject.get(p.id) ?? { tag: [], priority: [], platform: [] },
   }))
 }
 
@@ -106,7 +112,19 @@ export async function createProject(name, imageFile) {
     tursoConfigured: false,
     r2Configured: false,
   })
+  fieldOptionsByProject.set(project.id, { tag: [], priority: [], platform: [] })
   return project
+}
+
+/** @returns {Promise<{tag: string[], priority: string[], platform: string[]}>} */
+export async function updateProjectFieldOptions(projectId, fieldOptions) {
+  await delay(100)
+  requireLogin()
+  const id = Number(projectId)
+  const current = fieldOptionsByProject.get(id) ?? { tag: [], priority: [], platform: [] }
+  const next = { ...current, ...fieldOptions }
+  fieldOptionsByProject.set(id, next)
+  return next
 }
 
 /** @returns {Promise<{storageMode: 'self_hosted' | 'managed', isManagedAllowed: boolean, tursoConfigured: boolean, r2Configured: boolean}>} */
@@ -197,6 +215,7 @@ export async function deleteProjects(ids) {
   deletedProjectIds.forEach((id) => {
     membersByProject.delete(id)
     storageByProject.delete(id)
+    fieldOptionsByProject.delete(id)
   })
   return { deletedProjectIds }
 }
@@ -242,8 +261,8 @@ export async function createManualReport(projectId, fields) {
   const required = ['title', 'tag', 'desc', 'who', 'build', 'platform']
   const missing = required.filter((key) => !fields[key])
   if (missing.length > 0) throw new Error(`missing fields: ${missing.join(', ')}`)
-  const frequency = fields.frequency || 'unknown'
-  if (!FREQUENCY_KEYS.has(frequency)) throw new Error(`unknown frequency: ${frequency}`)
+  const priority = fields.priority || 'medium'
+  if (!PRIORITY_KEYS.has(priority)) throw new Error(`unknown priority: ${priority}`)
 
   const bug = {
     id: nextBugId++,
@@ -256,7 +275,7 @@ export async function createManualReport(projectId, fields) {
     who: fields.who,
     build: fields.build,
     platform: fields.platform,
-    frequency,
+    priority,
     videoUrl: '',
     fps: 0,
     durationFrames: 0,
@@ -292,8 +311,8 @@ export async function updateReportFields(id, fields) {
   requireLogin()
   const emptyField = EDITABLE_TEXT_FIELDS.find((key) => fields[key] === '')
   if (emptyField) throw new Error(`${emptyField} cannot be empty`)
-  if (fields.frequency != null && !FREQUENCY_KEYS.has(fields.frequency)) {
-    throw new Error(`unknown frequency: ${fields.frequency}`)
+  if (fields.priority != null && !PRIORITY_KEYS.has(fields.priority)) {
+    throw new Error(`unknown priority: ${fields.priority}`)
   }
 
   const patch = { ...fields }

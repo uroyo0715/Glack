@@ -12,6 +12,7 @@ import {
   countProjectMembers,
   getProjectRaw,
   updateProjectStorageConfig,
+  updateProjectFieldOptions,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -214,6 +215,36 @@ router.patch(
     const updated = await updateProjectStorageConfig(projectId, update)
     invalidateProjectDataClientCache(projectId)
     res.json(toStorageStatus(updated))
+  })
+)
+
+// --- 種類・優先度・プラットフォームのプルダウンで使わないプリセット項目を隠す設定 ---
+
+const FIELD_OPTION_KEYS = ['tag', 'priority', 'platform']
+
+router.patch(
+  '/projects/:id/field-options',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+
+    const body = req.body ?? {}
+    const update = {}
+    for (const key of Object.keys(body)) {
+      if (!FIELD_OPTION_KEYS.includes(key)) {
+        return res.status(400).json({ error: `unknown field: ${key}` })
+      }
+      if (!Array.isArray(body[key]) || !body[key].every((v) => typeof v === 'string')) {
+        return res.status(400).json({ error: `${key} must be an array of strings` })
+      }
+      update[key] = body[key]
+    }
+
+    const updated = await updateProjectFieldOptions(projectId, update)
+    res.json(updated.hiddenFieldOptions)
   })
 )
 

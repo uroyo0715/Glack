@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { TAG_OPTIONS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+import { TAG_OPTIONS, PRIORITY_OPTIONS, PLATFORM_OPTIONS } from '../data/mockBugs.js'
 import ComboField from './ComboField.jsx'
-
-const PLATFORM_OPTIONS = ['PC', 'PlayStation', 'Switch', 'Switch2', 'Xbox']
 
 const initialFields = (defaultWho) => ({
   title: '',
@@ -11,10 +9,18 @@ const initialFields = (defaultWho) => ({
   who: defaultWho || '',
   build: '',
   platform: '',
-  frequency: 'unknown',
+  priority: 'medium',
 })
 
-export default function NewReportForm({ projectId, defaultWho, buildOptions, onFetchMembers, onCreate, onClose }) {
+export default function NewReportForm({
+  projectId,
+  defaultWho,
+  buildOptions,
+  hiddenFieldOptions,
+  onFetchMembers,
+  onCreate,
+  onClose,
+}) {
   const [fields, setFields] = useState(() => initialFields(defaultWho))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
@@ -82,17 +88,20 @@ export default function NewReportForm({ projectId, defaultWho, buildOptions, onF
             value={fields.tag}
             onChange={(v) => setField('tag', v)}
             options={TAG_OPTIONS.map((t) => ({ value: t.key, label: t.label }))}
+            hiddenValues={hiddenFieldOptions?.tag}
             placeholder="選択してください"
             manualPlaceholder="例: サウンド不具合"
           />
         </label>
 
         <label className="new-report-field">
-          <span>発生頻度</span>
-          <select value={fields.frequency} onChange={(e) => setField('frequency', e.target.value)}>
-            {FREQUENCY_OPTIONS.map((f) => (
-              <option key={f.key} value={f.key}>
-                {f.label}
+          <span>優先度</span>
+          <select value={fields.priority} onChange={(e) => setField('priority', e.target.value)}>
+            {PRIORITY_OPTIONS.filter(
+              (p) => p.key === fields.priority || !hiddenFieldOptions?.priority?.includes(p.key)
+            ).map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
               </option>
             ))}
           </select>
@@ -135,6 +144,7 @@ export default function NewReportForm({ projectId, defaultWho, buildOptions, onF
             value={fields.platform}
             onChange={(v) => setField('platform', v)}
             options={PLATFORM_OPTIONS}
+            hiddenValues={hiddenFieldOptions?.platform}
             placeholder="選択してください"
             manualPlaceholder="例: PC (Steam)"
           />

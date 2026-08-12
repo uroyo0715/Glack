@@ -3,10 +3,10 @@ import VideoPlayer from '../components/VideoPlayer.jsx'
 import InputLogStrip from '../components/InputLogStrip.jsx'
 import EditReportForm from '../components/EditReportForm.jsx'
 import SegmentedToggle from '../components/SegmentedToggle.jsx'
-import { STATUS_COLUMNS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+import { STATUS_COLUMNS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
 
-function frequencyLabel(key) {
-  return FREQUENCY_OPTIONS.find((f) => f.key === key)?.label ?? key
+function priorityLabel(key) {
+  return PRIORITY_OPTIONS.find((p) => p.key === key)?.label ?? key
 }
 
 const WIDTH_STORAGE_KEY = 'glank-detail-width'
@@ -33,6 +33,7 @@ export default function BugDetailPage({
   onStatusChange,
   onUpdateReport,
   buildOptions,
+  hiddenFieldOptions,
   onFetchMembers,
   onDeleteReport,
 }) {
@@ -154,6 +155,7 @@ export default function BugDetailPage({
           <EditReportForm
             bug={bug}
             buildOptions={buildOptions}
+            hiddenFieldOptions={hiddenFieldOptions}
             onFetchMembers={onFetchMembers}
             onUpdate={onUpdateReport}
             onClose={() => setEditing(false)}
@@ -207,8 +209,8 @@ export default function BugDetailPage({
             <div className="v">{bug.platform}</div>
           </div>
           <div className="meta-item">
-            <div className="k">発生頻度</div>
-            <div className="v">{frequencyLabel(bug.frequency)}</div>
+            <div className="k">優先度</div>
+            <div className="v">{priorityLabel(bug.priority)}</div>
           </div>
         </div>
 

@@ -56,10 +56,10 @@ namespace Glank
                 who: SystemInfo.deviceName,
                 build: Application.version,
                 platform: Application.platform.ToString(),
-                frequency: "unknown");
+                priority: "medium");
         }
 
-        public void SubmitReport(string title, string tag, string desc, string who, string build, string platform, string frequency)
+        public void SubmitReport(string title, string tag, string desc, string who, string build, string platform, string priority)
         {
             if (config == null || (inputLogRecorder == null && CaptureInputLog == null))
             {
@@ -87,7 +87,7 @@ namespace Glank
                 who = who,
                 build = build,
                 platform = platform,
-                frequency = frequency,
+                priority = priority,
                 fps = snapshot.fps,
                 durationFrames = snapshot.durationFrames,
                 inputs = snapshot.inputs,

@@ -22,7 +22,7 @@ after(async () => {
   }
 })
 
-function postReportForm({ projectId = project.id, tag = 'crash', frequency, includeVideo = true } = {}) {
+function postReportForm({ projectId = project.id, tag = 'crash', priority, includeVideo = true } = {}) {
   const metadata = {
     projectId,
     title: 'テスト報告',
@@ -35,7 +35,7 @@ function postReportForm({ projectId = project.id, tag = 'crash', frequency, incl
     durationFrames: 60,
     inputs: [{ frame: 0, key: 'A', label: 'test' }],
   }
-  if (frequency !== undefined) metadata.frequency = frequency
+  if (priority !== undefined) metadata.priority = priority
 
   const form = new FormData()
   form.set('metadata', JSON.stringify(metadata))
@@ -69,7 +69,7 @@ test('POST /reports creates a bug with valid data (no API key configured)', asyn
   const bug = await res.json()
   assert.equal(bug.projectId, project.id)
   assert.equal(bug.status, 'todo')
-  assert.equal(bug.frequency, 'unknown') // 省略時のデフォルト
+  assert.equal(bug.priority, 'medium') // 省略時のデフォルト
   uploadedFiles.push(bug.videoUrl)
 })
 
@@ -87,14 +87,14 @@ test('POST /reports accepts a custom (non-preset) tag and uses it as its own lab
   uploadedFiles.push(bug.videoUrl)
 })
 
-test('POST /reports rejects unknown frequency but accepts empty string as unknown', async () => {
-  const badRes = await postReportForm({ frequency: 'not-a-real-frequency' })
+test('POST /reports rejects unknown priority but accepts empty string as default', async () => {
+  const badRes = await postReportForm({ priority: 'not-a-real-priority' })
   assert.equal(badRes.status, 400)
 
-  const emptyRes = await postReportForm({ frequency: '' })
+  const emptyRes = await postReportForm({ priority: '' })
   assert.equal(emptyRes.status, 201)
   const bug = await emptyRes.json()
-  assert.equal(bug.frequency, 'unknown')
+  assert.equal(bug.priority, 'medium')
   uploadedFiles.push(bug.videoUrl)
 })
 
@@ -172,7 +172,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
       who: 'another-tester',
       platform: 'PS5',
       tag: 'softlock',
-      frequency: 'always',
+      priority: 'high',
       desc: '修正後の説明',
     }),
   })
@@ -184,7 +184,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   assert.equal(patched.platform, 'PS5')
   assert.equal(patched.tag, 'softlock')
   assert.equal(patched.tagLabel, 'SOFTLOCK')
-  assert.equal(patched.frequency, 'always')
+  assert.equal(patched.priority, 'high')
   assert.equal(patched.desc, '修正後の説明')
   // ステータスは触れていないので元のまま
   assert.equal(patched.status, 'todo')
@@ -197,7 +197,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   assert.deepEqual(detail.inputs, created.inputs)
 })
 
-test('PATCH /reports/:id rejects empty text fields and unknown frequency, but accepts a custom tag', async () => {
+test('PATCH /reports/:id rejects empty text fields and unknown priority, but accepts a custom tag', async () => {
   const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()
   uploadedFiles.push(created.videoUrl)
@@ -226,12 +226,12 @@ test('PATCH /reports/:id rejects empty text fields and unknown frequency, but ac
   assert.equal(patched.tag, 'UIの崩れ')
   assert.equal(patched.tagLabel, 'UIの崩れ')
 
-  const badFrequency = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
+  const badPriority = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ frequency: 'not-a-real-frequency' }),
+    body: JSON.stringify({ priority: 'not-a-real-priority' }),
   })
-  assert.equal(badFrequency.status, 400)
+  assert.equal(badPriority.status, 400)
 })
 
 test('GET /reports/facets returns distinct build/who values used in the project', async () => {
@@ -337,7 +337,7 @@ test('POST /reports/manual creates a bug with no video (empty videoUrl, zeroed f
   assert.equal(bug.fps, 0)
   assert.equal(bug.durationFrames, 0)
   assert.deepEqual(bug.inputs, [])
-  assert.equal(bug.frequency, 'unknown')
+  assert.equal(bug.priority, 'medium')
 
   // 一覧・詳細どちらからも通常どおり取得できる
   const detail = await (

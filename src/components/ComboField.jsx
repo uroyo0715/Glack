@@ -8,10 +8,24 @@ function normalizeOptions(options) {
   return options.map((opt) => (typeof opt === 'string' ? { value: opt, label: opt } : opt))
 }
 
-/** プルダウン選択と自由入力のどちらでも値を決められる入力欄。 */
-export default function ComboField({ value, onChange, options, placeholder, manualPlaceholder, inputType = 'text' }) {
+/**
+ * プルダウン選択と自由入力のどちらでも値を決められる入力欄。
+ * hiddenValues: プロジェクト設定で非表示にされたプリセットのvalue一覧。プルダウンからは消すが、
+ * 既に選択されている値（過去の報告を編集中など）はそのまま選べるようにする（データを壊さないため）。
+ */
+export default function ComboField({
+  value,
+  onChange,
+  options,
+  hiddenValues,
+  placeholder,
+  manualPlaceholder,
+  inputType = 'text',
+}) {
   const [manualMode, setManualMode] = useState(false)
-  const normalized = normalizeOptions(options)
+  const normalized = normalizeOptions(options).filter(
+    (opt) => opt.value === value || !hiddenValues?.includes(opt.value)
+  )
 
   if (manualMode) {
     return (

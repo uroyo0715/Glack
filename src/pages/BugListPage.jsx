@@ -1,17 +1,18 @@
 import React, { useState } from 'react'
-import { STATUS_COLUMNS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+import { STATUS_COLUMNS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
 import FilterBar from '../components/FilterBar.jsx'
 import MembersPanel from '../components/MembersPanel.jsx'
 import NewReportForm from '../components/NewReportForm.jsx'
 import StorageSettingsPanel from '../components/StorageSettingsPanel.jsx'
+import FieldOptionsPanel from '../components/FieldOptionsPanel.jsx'
 import SegmentedToggle from '../components/SegmentedToggle.jsx'
 
 function statusLabel(key) {
   return STATUS_COLUMNS.find((s) => s.key === key)?.label ?? key
 }
 
-function frequencyLabel(key) {
-  return FREQUENCY_OPTIONS.find((f) => f.key === key)?.label ?? key
+function priorityLabel(key) {
+  return PRIORITY_OPTIONS.find((p) => p.key === key)?.label ?? key
 }
 
 export default function BugListPage({
@@ -29,6 +30,8 @@ export default function BugListPage({
   storageStatus,
   onFetchStorageStatus,
   onUpdateStorage,
+  hiddenFieldOptions,
+  onUpdateFieldOptions,
   query,
   setQuery,
   statusFilter,
@@ -45,6 +48,7 @@ export default function BugListPage({
   const [showMembers, setShowMembers] = useState(false)
   const [showNewReport, setShowNewReport] = useState(false)
   const [showStorage, setShowStorage] = useState(false)
+  const [showFieldOptions, setShowFieldOptions] = useState(false)
 
   // 絞り込みは App.jsx が fetchReports() 呼び出し時にサーバー側（クエリパラメータ）で行う。
   // ここでは取得済みの bugs をそのまま表示する。
@@ -85,6 +89,13 @@ export default function BugListPage({
             >
               ストレージ設定
             </button>
+            <button
+              type="button"
+              className={`panel-toggle ${showFieldOptions ? 'active' : ''}`}
+              onClick={() => setShowFieldOptions((v) => !v)}
+            >
+              選択肢の管理
+            </button>
             <SegmentedToggle
               value={view}
               onChange={setView}
@@ -105,6 +116,13 @@ export default function BugListPage({
         />
       )}
 
+      {showFieldOptions && (
+        <FieldOptionsPanel
+          hiddenFieldOptions={hiddenFieldOptions}
+          onUpdateFieldOptions={onUpdateFieldOptions}
+        />
+      )}
+
       {storageBlocked ? (
         <div className="storage-blocking-panel">
           <p>
@@ -122,6 +140,7 @@ export default function BugListPage({
               projectId={projectId}
               defaultWho={defaultReporterName}
               buildOptions={reportFacets.builds}
+              hiddenFieldOptions={hiddenFieldOptions}
               onFetchMembers={onFetchMembers}
               onCreate={onCreateReport}
               onClose={() => setShowNewReport(false)}
@@ -167,7 +186,7 @@ export default function BugListPage({
                 <div className="col-status">対応状況</div>
                 <div className="col-who">報告者</div>
                 <div className="col-build">ビルド</div>
-                <div className="col-freq">頻度</div>
+                <div className="col-priority">優先度</div>
               </div>
               <div className="bug-table-body">
                 {filtered.length === 0 && (
@@ -184,7 +203,7 @@ export default function BugListPage({
                     </div>
                     <div className="col-who">{b.who}</div>
                     <div className="col-build mono">{b.build}</div>
-                    <div className="col-freq">{frequencyLabel(b.frequency)}</div>
+                    <div className="col-priority">{priorityLabel(b.priority)}</div>
                   </div>
                 ))}
               </div>

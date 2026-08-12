@@ -99,4 +99,17 @@ describe('NewReportForm build/who/platform combo fields', () => {
       expect.objectContaining({ title: 'テストタイトル', who: 'アリス', build: '0.1.0', platform: 'Switch2' })
     )
   })
+
+  it('hides preset options a project has disabled via hiddenFieldOptions, but keeps the current value visible', async () => {
+    setup({ hiddenFieldOptions: { tag: [], priority: ['high'], platform: ['Xbox'] } })
+    await screen.findByText('アリス')
+
+    // 優先度の初期値は「中」なので、非表示にされた「高」だけプルダウンから消える
+    expect(screen.queryByText('高')).not.toBeInTheDocument()
+    expect(screen.getByText('中')).toBeInTheDocument()
+
+    // プラットフォームは何も選ばれていないので、非表示にした項目はそのまま消える
+    expect(screen.queryByText('Xbox')).not.toBeInTheDocument()
+    expect(screen.getByText('PlayStation')).toBeInTheDocument()
+  })
 })
