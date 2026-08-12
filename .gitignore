@@ -1,6 +1,10 @@
 node_modules/
 dist/
 
+# Claude Code harness files
+.agents/
+skills-lock.json
+
 # secrets
 .env
 server/.env
