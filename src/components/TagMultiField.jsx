@@ -26,8 +26,7 @@ export default function TagMultiField({ value, onChange, options, hiddenValues, 
     return options.find((o) => o.value === v)?.label ?? v
   }
 
-  function handleAddManual(e) {
-    e.preventDefault()
+  function addManual() {
     const v = manualInput.trim()
     if (!v || value.includes(v)) return
     onChange([...value, v])
@@ -60,17 +59,25 @@ export default function TagMultiField({ value, onChange, options, hiddenValues, 
           </button>
         ))}
       </div>
-      <form className="tag-multi-add" onSubmit={handleAddManual}>
+      {/* 種類の追加行は<form>にしない。この要素自体が報告フォーム（<form>）の中に置かれるため、
+          <form>を入れ子にすると送信イベントが外側のフォームまでバブルして二重送信を起こす
+          （実際にこれが原因で「新規報告」画面から強制的にプロジェクト一覧へ戻る不具合が起きた）。 */}
+      <div className="tag-multi-add">
         <input
           type="text"
           value={manualInput}
           onChange={(e) => setManualInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault() // 外側の報告フォームが送信されてしまうのを防ぐ
+            addManual()
+          }}
           placeholder={manualPlaceholder}
         />
-        <button type="submit" disabled={!manualInput.trim()}>
+        <button type="button" onClick={addManual} disabled={!manualInput.trim()}>
           追加
         </button>
-      </form>
+      </div>
     </div>
   )
 }

@@ -106,6 +106,32 @@ describe('NewReportForm build/who/platform combo fields', () => {
     )
   })
 
+  it('adding a custom 種類 tag does not submit the surrounding form (regression: nested <form>)', async () => {
+    const user = userEvent.setup()
+    const props = setup()
+    await screen.findByText('アリス')
+
+    // すべての必須項目を先に埋めてから、最後にタグを追加するケース（追加ボタンが所属する
+    // <form>が外側の新規報告フォームに入れ子になっていると、submitイベントが外側までバブルして
+    // 意図せず報告が送信されてしまっていた）。
+    const titleInput = screen.getAllByRole('textbox')[0]
+    await user.type(titleInput, 'テストタイトル')
+    const descInput = document.querySelector('textarea')
+    await user.type(descInput, 'テスト詳細')
+    await user.click(screen.getByRole('button', { name: 'CRASH' }))
+    await user.selectOptions(screen.getByDisplayValue('メンバーから選択'), 'アリス')
+    await user.selectOptions(screen.getByDisplayValue('既存のビルドから選択'), '0.1.0')
+    await user.selectOptions(screen.getByDisplayValue('選択してください'), 'PC')
+
+    const tagInput = screen.getByPlaceholderText('例: サウンド不具合')
+    await user.type(tagInput, 'サウンド不具合')
+    await user.click(screen.getByRole('button', { name: '追加' }))
+
+    expect(props.onCreate).not.toHaveBeenCalled()
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(screen.getByText('サウンド不具合')).toBeInTheDocument()
+  })
+
   it('hides preset options a project has disabled via hiddenFieldOptions, but keeps the current value visible', async () => {
     setup({ hiddenFieldOptions: { tag: [], priority: ['high'], platform: ['Xbox'] } })
     await screen.findByText('アリス')
