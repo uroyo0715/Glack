@@ -96,12 +96,12 @@ test('POST /reports rejects unknown projectId', async () => {
   assert.equal(res.status, 400)
 })
 
-test('POST /reports accepts custom (non-preset) tags and uses them as their own labels', async () => {
+test('POST /reports accepts free-text tags and uses them as their own labels', async () => {
   const res = await postReportForm({ tags: ['crash', 'サウンド不具合'] })
   assert.equal(res.status, 201)
   const bug = await res.json()
   assert.deepEqual(bug.tags, ['crash', 'サウンド不具合'])
-  assert.deepEqual(bug.tagLabels, ['CRASH', 'サウンド不具合'])
+  assert.deepEqual(bug.tagLabels, ['crash', 'サウンド不具合'])
   uploadedFiles.push(bug.videoUrl)
 })
 
@@ -201,7 +201,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   assert.equal(patched.who, 'another-tester')
   assert.equal(patched.platform, 'PS5')
   assert.deepEqual(patched.tags, ['softlock', 'visual'])
-  assert.deepEqual(patched.tagLabels, ['SOFTLOCK', 'VISUAL'])
+  assert.deepEqual(patched.tagLabels, ['softlock', 'visual'])
   assert.equal(patched.priority, 'high')
   assert.equal(patched.desc, '修正後の説明')
   // ステータスは触れていないので元のまま

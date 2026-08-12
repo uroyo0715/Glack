@@ -2,11 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import FilterBar from './FilterBar.jsx'
-import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
+import { STATUS_COLUMNS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
 
 const ALL_STATUS = STATUS_COLUMNS.map((s) => s.key)
-const ALL_TAGS = TAG_OPTIONS.map((t) => t.key)
 const ALL_PRIORITIES = PRIORITY_OPTIONS.map((p) => p.key)
+
+// 種類のプリセットは既定で空なので、テストでは「このプロジェクトが選択肢の管理で
+// 追加した独自項目」という想定でタグを用意する。
+const TEST_TAGS = ['crash', 'visual']
 
 function setup(overrides = {}) {
   const props = {
@@ -14,7 +17,7 @@ function setup(overrides = {}) {
     setQuery: vi.fn(),
     statusFilter: ALL_STATUS,
     toggleStatus: vi.fn(),
-    tagFilter: ALL_TAGS,
+    tagFilter: TEST_TAGS,
     toggleTag: vi.fn(),
     priorityFilter: ALL_PRIORITIES,
     togglePriority: vi.fn(),
@@ -24,7 +27,7 @@ function setup(overrides = {}) {
     setWhoFilter: vi.fn(),
     reportFacets: { builds: [], whos: [], tags: [] },
     hiddenFieldOptions: { tag: [], priority: [], platform: [] },
-    customFieldOptions: { tag: [], platform: [] },
+    customFieldOptions: { tag: TEST_TAGS, platform: [] },
     resultCount: 9,
     ...overrides,
   }
@@ -55,8 +58,8 @@ describe('FilterBar', () => {
   it('calls toggleTag with the clicked tag key', async () => {
     const user = userEvent.setup()
     const props = setup()
-    await user.click(screen.getByRole('button', { name: TAG_OPTIONS[0].label }))
-    expect(props.toggleTag).toHaveBeenCalledWith(TAG_OPTIONS[0].key)
+    await user.click(screen.getByRole('button', { name: TEST_TAGS[0] }))
+    expect(props.toggleTag).toHaveBeenCalledWith(TEST_TAGS[0])
   })
 
   it('calls togglePriority with the clicked priority key', async () => {
@@ -70,7 +73,7 @@ describe('FilterBar', () => {
     setup({ statusFilter: [STATUS_COLUMNS[0].key], tagFilter: [], priorityFilter: [] })
     expect(screen.getByRole('button', { name: STATUS_COLUMNS[0].label })).toHaveClass('active')
     expect(screen.getByRole('button', { name: STATUS_COLUMNS[1].label })).not.toHaveClass('active')
-    expect(screen.getByRole('button', { name: TAG_OPTIONS[0].label })).not.toHaveClass('active')
+    expect(screen.getByRole('button', { name: TEST_TAGS[0] })).not.toHaveClass('active')
     expect(screen.getByRole('button', { name: PRIORITY_OPTIONS[0].label })).not.toHaveClass('active')
   })
 
@@ -85,10 +88,10 @@ describe('FilterBar', () => {
     expect(props.setWhoFilter).toHaveBeenCalledWith('bob')
   })
 
-  it('does not render a chip for a preset tag hidden via hiddenFieldOptions', () => {
-    setup({ hiddenFieldOptions: { tag: [TAG_OPTIONS[0].key], priority: [], platform: [] } })
-    expect(screen.queryByRole('button', { name: TAG_OPTIONS[0].label })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: TAG_OPTIONS[1].label })).toBeInTheDocument()
+  it('does not render a chip for a tag hidden via hiddenFieldOptions', () => {
+    setup({ hiddenFieldOptions: { tag: [TEST_TAGS[0]], priority: [], platform: [] } })
+    expect(screen.queryByRole('button', { name: TEST_TAGS[0] })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: TEST_TAGS[1] })).toBeInTheDocument()
   })
 
   it('renders chips for project custom tags and for freely-typed tags actually used in reports', () => {
@@ -98,5 +101,11 @@ describe('FilterBar', () => {
     })
     expect(screen.getByRole('button', { name: 'バランス調整' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'サウンド不具合' })).toBeInTheDocument()
+  })
+
+  it('does not apply a color class to tag chips (only 対応 gets a fixed color language)', () => {
+    setup()
+    const chip = screen.getByRole('button', { name: TEST_TAGS[0] })
+    expect(chip.className).not.toMatch(/status-chip/)
   })
 })

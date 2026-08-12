@@ -197,11 +197,10 @@ export const STATUS_COLUMNS = [
   { key: 'done', label: '完了' },
 ]
 
-export const TAG_OPTIONS = [
-  { key: 'crash', label: 'CRASH' },
-  { key: 'visual', label: 'VISUAL' },
-  { key: 'softlock', label: 'SOFTLOCK' },
-]
+// 種類のプリセットは既定で空にしてある。ゲームジャンルによって頻出する種類が違う
+// （例: 格闘ゲームなら「STACK」、パズルなら「詰みポイント」等）ため、各プロジェクトが
+// 「選択肢の管理」から自分たちに合った項目を追加する想定。
+export const TAG_OPTIONS = []
 
 export const PRIORITY_OPTIONS = [
   { key: 'high', label: '高' },

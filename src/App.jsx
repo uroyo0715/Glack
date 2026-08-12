@@ -28,11 +28,13 @@ import {
   me,
   updateDisplayName,
 } from './api/index.js'
-import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS } from './data/mockBugs.js'
+import { STATUS_COLUMNS, PRIORITY_OPTIONS } from './data/mockBugs.js'
 
 const ALL_STATUS = STATUS_COLUMNS.map((s) => s.key)
-const ALL_TAGS = TAG_OPTIONS.map((t) => t.key)
 const ALL_PRIORITIES = PRIORITY_OPTIONS.map((p) => p.key)
+// 種類は既定のプリセットを持たずプロジェクトごとに自由なため、status/priorityのように
+// 「既知の全キー」を初期値にできない。空配列を「絞り込みなし（すべて表示）」として扱う。
+const NO_TAG_FILTER = []
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -53,7 +55,7 @@ export default function App() {
 
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
-  const [tagFilter, setTagFilter] = useState(ALL_TAGS)
+  const [tagFilter, setTagFilter] = useState(NO_TAG_FILTER)
   const [priorityFilter, setPriorityFilter] = useState(ALL_PRIORITIES)
   const [buildFilter, setBuildFilter] = useState('')
   const [whoFilter, setWhoFilter] = useState('')
@@ -213,7 +215,7 @@ export default function App() {
         const narrowed = result.filter(
           (b) =>
             statusFilter.includes(b.status) &&
-            b.tags.some((t) => tagFilter.includes(t)) &&
+            (tagFilter.length === 0 || b.tags.some((t) => tagFilter.includes(t))) &&
             priorityFilter.includes(b.priority)
         )
         setBugs(narrowed)
@@ -373,7 +375,7 @@ export default function App() {
     setSelectedProjectId(id)
     setQuery('')
     setStatusFilter(ALL_STATUS)
-    setTagFilter(ALL_TAGS)
+    setTagFilter(NO_TAG_FILTER)
     setPriorityFilter(ALL_PRIORITIES)
     setBuildFilter('')
     setWhoFilter('')

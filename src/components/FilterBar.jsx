@@ -78,7 +78,7 @@ export default function FilterBar({
         {STATUS_COLUMNS.map((s) => (
           <button
             key={s.key}
-            className={`chip ${statusFilter.includes(s.key) ? 'active' : ''}`}
+            className={`chip status-chip ${s.key} ${statusFilter.includes(s.key) ? 'active' : ''}`}
             onClick={() => toggleStatus(s.key)}
           >
             {s.label}
@@ -91,7 +91,7 @@ export default function FilterBar({
         {tagChipOptions.map((t) => (
           <button
             key={t.key}
-            className={`chip tag-chip ${t.key} ${tagFilter.includes(t.key) ? 'active' : ''}`}
+            className={`chip ${tagFilter.includes(t.key) ? 'active' : ''}`}
             onClick={() => toggleTag(t.key)}
           >
             {t.label}

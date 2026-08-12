@@ -1178,20 +1178,28 @@ body {
   border-color: var(--text-faint);
   background: var(--surface-3);
 }
-.chip.tag-chip.crash.active {
-  border-color: var(--accent-red);
-  color: var(--accent-red);
-  background: rgba(193, 97, 90, 0.12);
+/* 対応状況の絞り込みチップは、一覧のstatus-badgeと同じ配色で対応状況が一目で分かるようにする
+   （種類は自由記述でプロジェクトごとに違うため色は付けない。対応状況だけがこのアプリの
+   固定の色言語を持つ軸になる）。 */
+.chip.status-chip.todo.active {
+  border-color: var(--text-faint);
+  color: var(--text-dim);
+  background: var(--surface-3);
 }
-.chip.tag-chip.visual.active {
-  border-color: var(--accent-cyan);
-  color: var(--accent-cyan);
-  background: rgba(91, 163, 154, 0.12);
+.chip.status-chip.in_progress.active {
+  border-color: var(--status-progress);
+  color: var(--status-progress);
+  background: rgba(109, 147, 201, 0.12);
 }
-.chip.tag-chip.softlock.active {
-  border-color: var(--accent-amber);
-  color: var(--accent-amber);
-  background: rgba(217, 154, 79, 0.12);
+.chip.status-chip.review.active {
+  border-color: var(--status-review);
+  color: var(--status-review);
+  background: rgba(201, 123, 63, 0.12);
+}
+.chip.status-chip.done.active {
+  border-color: var(--status-done);
+  color: var(--status-done);
+  background: rgba(127, 174, 122, 0.12);
 }
 .result-count {
   margin-left: auto;
@@ -1340,42 +1348,15 @@ body {
   gap: 6px;
   align-items: center;
 }
-/* 種類タグは淡色ピルではなく、色スウォッチ+ラベルで表す */
+/* 種類はプロジェクトごとの自由記述で固定の意味を持たないため、色は付けずプレーンな
+   ラベル表示にする（色分けは対応状況・優先度など意味が固定された軸だけに使う）。 */
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--text-dim);
-}
-.tag::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 1.5px;
-  /* プリセット外の自由記述タグ用のフォールバック（.tag.crash等はこれよりクラス数が多いので上書きする） */
-  background: var(--text-faint);
-  flex-shrink: 0;
-}
-.tag.crash {
-  color: var(--accent-red);
-}
-.tag.crash::before {
-  background: var(--accent-red);
-}
-.tag.visual {
-  color: var(--accent-cyan);
-}
-.tag.visual::before {
-  background: var(--accent-cyan);
-}
-.tag.softlock {
-  color: var(--accent-amber);
-}
-.tag.softlock::before {
-  background: var(--accent-amber);
 }
 .detail-tag-list {
   display: flex;
@@ -1384,10 +1365,6 @@ body {
 }
 .detail-tag {
   font-size: 13px;
-}
-.detail-tag::before {
-  width: 8px;
-  height: 8px;
 }
 .bug-card .who {
   font-size: 11px;

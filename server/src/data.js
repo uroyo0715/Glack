@@ -1,10 +1,8 @@
 import { db } from './db.js'
 
-export const TAG_LABELS = {
-  crash: 'CRASH',
-  visual: 'VISUAL',
-  softlock: 'SOFTLOCK',
-}
+// 種類（tag）に既定のプリセットは無く、全プロジェクト共通のラベル変換テーブルも持たない
+// （プロジェクトごとに「選択肢の管理」で追加した項目や自由記述をそのままラベルとして使う）。
+export const TAG_LABELS = {}
 
 export const PRIORITY_LABELS = {
   high: '高',
@@ -12,8 +10,6 @@ export const PRIORITY_LABELS = {
   low: '低',
 }
 
-// 種類（tag）はcrash/visual/softlockのプリセットに加えて自由記述も許可する。
-// プリセット以外は入力された文字列自体をラベルとしてそのまま使う。
 export function resolveTagLabel(tag) {
   return TAG_LABELS[tag] ?? tag
 }

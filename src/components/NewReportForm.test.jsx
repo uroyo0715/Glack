@@ -8,6 +8,9 @@ function setup(overrides = {}) {
     projectId: 1,
     defaultWho: '',
     buildOptions: ['0.1.0', '0.2.0'],
+    // 種類のプリセットは既定で空なので、プリセットボタンのトグル動作を検証するテストでは
+    // このプロジェクトが「選択肢の管理」で追加した独自項目という想定で渡す。
+    customFieldOptions: { tag: ['crash', 'visual'], platform: [] },
     onFetchMembers: vi.fn().mockResolvedValue([
       { email: 'a@example.com', displayName: 'アリス' },
       { email: 'b@example.com', displayName: 'ボブ' },
@@ -63,8 +66,8 @@ describe('NewReportForm build/who/platform combo fields', () => {
     await user.type(descInput, '効果音が二重に鳴る')
 
     // プリセットの種類は複数トグルできる
-    await user.click(screen.getByRole('button', { name: 'CRASH' }))
-    await user.click(screen.getByRole('button', { name: 'VISUAL' }))
+    await user.click(screen.getByRole('button', { name: 'crash' }))
+    await user.click(screen.getByRole('button', { name: 'visual' }))
 
     // プリセットにない種類はテキスト入力から追加する
     const tagInput = screen.getByPlaceholderText('例: サウンド不具合')
@@ -93,7 +96,7 @@ describe('NewReportForm build/who/platform combo fields', () => {
     const descInput = document.querySelector('textarea')
     await user.type(descInput, 'テスト詳細')
 
-    await user.click(screen.getByRole('button', { name: 'CRASH' }))
+    await user.click(screen.getByRole('button', { name: 'crash' }))
     await user.selectOptions(screen.getByDisplayValue('メンバーから選択'), 'アリス')
     await user.selectOptions(screen.getByDisplayValue('既存のビルドから選択'), '0.1.0')
     await user.selectOptions(screen.getByDisplayValue('選択してください'), 'Switch2')
@@ -118,7 +121,7 @@ describe('NewReportForm build/who/platform combo fields', () => {
     await user.type(titleInput, 'テストタイトル')
     const descInput = document.querySelector('textarea')
     await user.type(descInput, 'テスト詳細')
-    await user.click(screen.getByRole('button', { name: 'CRASH' }))
+    await user.click(screen.getByRole('button', { name: 'crash' }))
     await user.selectOptions(screen.getByDisplayValue('メンバーから選択'), 'アリス')
     await user.selectOptions(screen.getByDisplayValue('既存のビルドから選択'), '0.1.0')
     await user.selectOptions(screen.getByDisplayValue('選択してください'), 'PC')
