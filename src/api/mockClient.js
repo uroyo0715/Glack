@@ -311,6 +311,7 @@ export async function createManualReport(projectId, fields) {
     status: 'todo',
     desc: fields.desc,
     who: fields.who,
+    assignee: '',
     build: fields.build,
     platform: fields.platform,
     priority,

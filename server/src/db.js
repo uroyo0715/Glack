@@ -38,6 +38,7 @@ export const BUG_TABLES_SCHEMA = `
     status TEXT NOT NULL,
     description TEXT NOT NULL,
     who TEXT NOT NULL,
+    assignee TEXT NOT NULL DEFAULT '', -- 対応者。報告者(who)とは別で、報告後に誰が対応するか割り当てる用途
     build TEXT NOT NULL,
     platform TEXT NOT NULL,
     priority TEXT NOT NULL,
@@ -247,6 +248,16 @@ export async function migrateTagToTags(client) {
 }
 
 await migrateTagToTags(db)
+
+// マイグレーション: 対応者(assignee)導入前に作られたbugsには存在しないため追加する。
+export async function migrateAddAssigneeIfNeeded(client) {
+  const { rows: columns } = await client.execute('PRAGMA table_info(bugs)')
+  const hasAssignee = columns.some((c) => c.name === 'assignee')
+  if (hasAssignee) return
+  await client.execute("ALTER TABLE bugs ADD COLUMN assignee TEXT NOT NULL DEFAULT ''")
+}
+
+await migrateAddAssigneeIfNeeded(db)
 
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。

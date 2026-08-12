@@ -135,7 +135,7 @@ router.patch(
     const existing = await getBugById(client, id)
     if (!existing) return res.status(404).json({ error: 'not found' })
 
-    const { status, title, tags, desc, who, build, platform, priority } = req.body ?? {}
+    const { status, title, tags, desc, who, assignee, build, platform, priority } = req.body ?? {}
 
     const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
     if (emptyField) {
@@ -148,12 +148,23 @@ router.patch(
       return res.status(400).json({ error: `unknown priority: ${priority}` })
     }
 
-    const hasFieldUpdates = [title, tags, desc, who, build, platform, priority].some((v) => v != null)
+    const hasFieldUpdates = [title, tags, desc, who, assignee, build, platform, priority].some(
+      (v) => v != null
+    )
 
     let updated
     if (status) updated = await updateBugStatus(client, id, status)
     if (hasFieldUpdates) {
-      updated = await updateBugFields(client, id, { title, tags, desc, who, build, platform, priority })
+      updated = await updateBugFields(client, id, {
+        title,
+        tags,
+        desc,
+        who,
+        assignee,
+        build,
+        platform,
+        priority,
+      })
     }
     if (!updated) {
       const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing

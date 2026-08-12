@@ -1862,7 +1862,13 @@ body {
 
 .status-row {
   max-width: 100%;
-  margin-top: 20px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.status-row-item {
   display: flex;
   align-items: center;
   gap: 10px;

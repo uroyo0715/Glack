@@ -47,6 +47,7 @@ export default function BugDetailPage({
   const [detailWidth, setDetailWidth] = useState(loadStoredWidth)
   const [resizingWidth, setResizingWidth] = useState(false)
   const [logLayout, setLogLayout] = useState(loadStoredLogLayout) // 'side' | 'below'
+  const [assigneeOptions, setAssigneeOptions] = useState([])
   const resizeDragRef = useRef(null) // { startX, startWidth }
   const hasVideo = Boolean(bug.videoUrl)
   const duration = hasVideo ? bug.durationFrames / bug.fps : 0
@@ -59,6 +60,27 @@ export default function BugDetailPage({
     setConfirmingDelete(false)
     setDeleteError(null)
   }, [bug.id])
+
+  // 対応者のプルダウンはプロジェクトメンバーの表示名から選ぶ（報告者選択と同じ考え方）。
+  useEffect(() => {
+    let cancelled = false
+    onFetchMembers(bug.projectId)
+      .then((members) => {
+        if (cancelled) return
+        const names = [...new Set(members.map((m) => m.displayName).filter(Boolean))].sort()
+        setAssigneeOptions(names)
+      })
+      .catch(() => {
+        if (!cancelled) setAssigneeOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [bug.projectId, onFetchMembers])
+
+  function handleAssigneeChange(e) {
+    onUpdateReport(bug.id, { assignee: e.target.value })
+  }
 
   function handleSelectFrame(frame) {
     setPlaying(false)
@@ -133,6 +155,35 @@ export default function BugDetailPage({
           </div>
           <h1>{bug.title}</h1>
           <div className="desc">{bug.desc}</div>
+
+          <div className="status-row">
+            <div className="status-row-item">
+              <div className="k">ステータス</div>
+              <select
+                className="status-select"
+                value={bug.status}
+                onChange={(e) => onStatusChange(bug.id, e.target.value)}
+              >
+                {STATUS_COLUMNS.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="status-row-item">
+              <div className="k">対応者</div>
+              <select className="status-select" value={bug.assignee} onChange={handleAssigneeChange}>
+                <option value="">未割り当て</option>
+                {/* 現在の対応者がメンバー一覧から外れていても（脱退済み等）選択肢自体は消さない */}
+                {[...new Set([bug.assignee, ...assigneeOptions].filter(Boolean))].map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {confirmingDelete && (
@@ -220,21 +271,6 @@ export default function BugDetailPage({
             <div className="k">優先度</div>
             <div className="v">{priorityLabel(bug.priority)}</div>
           </div>
-        </div>
-
-        <div className="status-row">
-          <div className="k">ステータス</div>
-          <select
-            className="status-select"
-            value={bug.status}
-            onChange={(e) => onStatusChange(bug.id, e.target.value)}
-          >
-            {STATUS_COLUMNS.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div

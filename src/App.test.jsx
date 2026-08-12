@@ -27,7 +27,7 @@ describe('App (mock client integration)', () => {
     await user.click(await screen.findByText('崖から落ちた直後にゲームがフリーズする'))
 
     await screen.findByRole('heading', { name: '崖から落ちた直後にゲームがフリーズする' })
-    const statusSelect = screen.getByRole('combobox')
+    const statusSelect = screen.getByDisplayValue('未対応')
     expect(statusSelect.value).toBe('todo')
 
     await user.selectOptions(statusSelect, '対応中')
@@ -40,6 +40,24 @@ describe('App (mock client integration)', () => {
     await user.click(screen.getByRole('button', { name: '← プロジェクト一覧に戻る' }))
     await screen.findByText('プロジェクト')
     expect(await screen.findByText('Nightfall Trail')).toBeInTheDocument()
+  })
+
+  it('lets the user assign a report to a project member from the 対応者 dropdown', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Googleでログイン' }))
+    await user.click(await screen.findByText('Nightfall Trail'))
+    await user.click(await screen.findByText('崖から落ちた直後にゲームがフリーズする'))
+
+    await screen.findByRole('heading', { name: '崖から落ちた直後にゲームがフリーズする' })
+    const assigneeSelect = screen.getByDisplayValue('未割り当て')
+    expect(assigneeSelect.value).toBe('')
+
+    // メンバー一覧の取得(モックでも非同期)を待ってから選択肢に反映される
+    await within(assigneeSelect).findByRole('option', { name: 'デモユーザー' })
+    await user.selectOptions(assigneeSelect, 'デモユーザー')
+    await waitFor(() => expect(assigneeSelect.value).toBe('デモユーザー'))
   })
 
   it('deletes a bug report from the detail page and returns to the list', async () => {

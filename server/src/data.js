@@ -34,6 +34,7 @@ function rowToListItem(row) {
     status: row.status,
     desc: row.description,
     who: row.who,
+    assignee: row.assignee ?? '',
     build: row.build,
     platform: row.platform,
     priority: row.priority,
@@ -145,7 +146,11 @@ export async function updateBugStatus(client, id, status) {
 
 // 動画・入力ログ以外の報告メタデータ（タイトル・ビルドバージョン等）は報告後も編集できる。
 // 渡されたフィールドだけを更新する（部分更新）。
-export async function updateBugFields(client, id, { title, tags, desc, who, build, platform, priority } = {}) {
+export async function updateBugFields(
+  client,
+  id,
+  { title, tags, desc, who, assignee, build, platform, priority } = {}
+) {
   const sets = []
   const args = []
   if (title != null) {
@@ -163,6 +168,10 @@ export async function updateBugFields(client, id, { title, tags, desc, who, buil
   if (who != null) {
     sets.push('who = ?')
     args.push(who)
+  }
+  if (assignee != null) {
+    sets.push('assignee = ?')
+    args.push(assignee)
   }
   if (build != null) {
     sets.push('build = ?')

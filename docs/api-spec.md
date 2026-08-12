@@ -21,14 +21,15 @@
 interface Bug {
   id: string
   title: string
-  // 1件の報告に複数の種類タグを付けられる。'crash' | 'visual' | 'softlock' はプリセット
-  // （色分け表示あり）で、それ以外の任意の文字列も自由記述の種類として受け付ける
-  // （tagLabelsの対応する要素はtagsと同じ文字列になる）。
+  // 1件の報告に複数の種類タグを付けられる。既定のプリセットは無く（プロジェクトごとに
+  // 「選択肢の管理」で追加する）、色分けもしない。自由記述したタグはtagLabelsの対応する
+  // 要素がtagsと同じ文字列になる。
   tags: string[]
   tagLabels: string[]
   status: 'todo' | 'in_progress' | 'review' | 'done'
   desc: string
   who: string            // 報告者 or QA担当者
+  assignee: string       // 対応者。空文字は未割り当て（whoとは別で、報告後に誰が対応するか割り当てる）
   build: string          // e.g. "0.14.2-dev"
   platform: string       // e.g. "PC (Steam)"
   priority: PriorityLevel
@@ -216,6 +217,7 @@ interface PatchReportBody {
   tags?: string[] // 空配列は不可（最低1つ必要）
   desc?: string
   who?: string
+  assignee?: string // 対応者。他のフィールドと違い空文字を許可する（未割り当てに戻す）
   build?: string
   platform?: string
   priority?: PriorityLevel
@@ -232,7 +234,7 @@ interface PatchReportBody {
 
 `title`/`desc`/`who`/`build`/`platform`を空文字で渡した場合は`400`。`tags`を渡す場合は
 空配列だと`400`（プリセット以外の自由記述も許可するため個々の値のチェックはしない）。
-`priority`は未知の値だと`400`。
+`priority`は未知の値だと`400`。`assignee`だけは空文字を許可する（未割り当てに戻す操作のため）。
 
 Response: 更新後の`BugListItem`。
 

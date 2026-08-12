@@ -20,6 +20,7 @@
  * @property {BugStatus} status
  * @property {string} desc
  * @property {string} who
+ * @property {string} assignee - 対応者。空文字は未割り当て
  * @property {string} build
  * @property {string} platform
  * @property {string} priority

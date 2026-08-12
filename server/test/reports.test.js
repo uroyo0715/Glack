@@ -192,6 +192,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
       tags: ['softlock', 'visual'],
       priority: 'high',
       desc: '修正後の説明',
+      assignee: 'yamada_dev',
     }),
   })
   assert.equal(patchRes.status, 200)
@@ -204,6 +205,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   assert.deepEqual(patched.tagLabels, ['softlock', 'visual'])
   assert.equal(patched.priority, 'high')
   assert.equal(patched.desc, '修正後の説明')
+  assert.equal(patched.assignee, 'yamada_dev')
   // ステータスは触れていないので元のまま
   assert.equal(patched.status, 'todo')
 
@@ -213,6 +215,30 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   ).json()
   assert.equal(detail.videoUrl, created.videoUrl)
   assert.deepEqual(detail.inputs, created.inputs)
+})
+
+test('a new report has no assignee by default, and assignee can be set then cleared with an empty string', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+  assert.equal(created.assignee, '')
+
+  const assigned = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assignee: 'yamada_dev' }),
+  })
+  assert.equal(assigned.status, 200)
+  assert.equal((await assigned.json()).assignee, 'yamada_dev')
+
+  // assigneeだけは他のテキストフィールドと違い、空文字で「未割り当て」に戻せる
+  const unassigned = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assignee: '' }),
+  })
+  assert.equal(unassigned.status, 200)
+  assert.equal((await unassigned.json()).assignee, '')
 })
 
 test('PATCH /reports/:id rejects empty text fields and unknown priority, but accepts a custom tag', async () => {
