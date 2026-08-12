@@ -238,20 +238,14 @@ function AppShell({ user, setUser }) {
     }
   }, [user, selectedProjectId, storageReloadToken])
 
-  const storageBlocked =
-    storageStatus != null && storageStatus.storageMode === 'self_hosted' && !storageStatus.tursoConfigured
-
+  // storageStatusの取得を待たず、プロジェクトを開いたら一覧取得を並行して投げる
+  // （待ってから投げると往復が直列になり体感が遅くなる。RenderとTursoのリージョンが
+  // 離れているとこの待ち時間が特に響く）。ストレージ未設定の間は409 turso_not_configured
+  // になるが、それはBugListPage側がstorageStatusを見て別途ブロック案内を出すため、
+  // ここではエラー表示はせず空の一覧として扱うだけでよい。
   useEffect(() => {
-    if (!user || selectedProjectId == null || storageStatus == null) return
+    if (!user || selectedProjectId == null) return
     let cancelled = false
-
-    if (storageBlocked) {
-      setBugs([])
-      setBugsError(null)
-      setBugsLoading(false)
-      setBugsLoadedOnce(true)
-      return
-    }
 
     setBugsLoading(true)
     setBugsError(null)
@@ -279,6 +273,10 @@ function AppShell({ user, setUser }) {
       })
       .catch((err) => {
         if (cancelled) return
+        if (err.code === 'turso_not_configured') {
+          setBugs([])
+          return
+        }
         setBugsError(err.message ?? String(err))
       })
       .finally(() => {
@@ -293,8 +291,6 @@ function AppShell({ user, setUser }) {
   }, [
     user,
     selectedProjectId,
-    storageStatus,
-    storageBlocked,
     query,
     statusFilter,
     tagFilter,
