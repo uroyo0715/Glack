@@ -1069,11 +1069,26 @@ body {
   max-width: 100%;
   line-height: 1.5;
 }
+.detail-layout-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin-top: 16px;
+}
 .detail-columns {
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
   align-items: flex-start;
+  margin-top: 10px;
+}
+.detail-columns.stacked {
+  flex-direction: column;
+}
+.detail-columns.stacked .detail-col-video,
+.detail-columns.stacked .detail-col-log {
+  flex: 1 1 auto;
+  width: 100%;
 }
 .detail-col-video {
   flex: 3 1 420px;

@@ -19,6 +19,14 @@ function loadStoredWidth() {
   return Number.isFinite(n) && n >= MIN_DETAIL_WIDTH ? n : DEFAULT_DETAIL_WIDTH
 }
 
+const LOG_LAYOUT_STORAGE_KEY = 'glank-detail-log-layout'
+
+function loadStoredLogLayout() {
+  if (typeof window === 'undefined') return 'side'
+  const v = window.localStorage.getItem(LOG_LAYOUT_STORAGE_KEY)
+  return v === 'below' ? 'below' : 'side'
+}
+
 export default function BugDetailPage({
   bug,
   onStatusChange,
@@ -35,6 +43,7 @@ export default function BugDetailPage({
   const [deleteError, setDeleteError] = useState(null)
   const [detailWidth, setDetailWidth] = useState(loadStoredWidth)
   const [resizingWidth, setResizingWidth] = useState(false)
+  const [logLayout, setLogLayout] = useState(loadStoredLogLayout) // 'side' | 'below'
   const resizeDragRef = useRef(null) // { startX, startWidth }
   const hasVideo = Boolean(bug.videoUrl)
   const duration = hasVideo ? bug.durationFrames / bug.fps : 0
@@ -51,6 +60,11 @@ export default function BugDetailPage({
   function handleSelectFrame(frame) {
     setPlaying(false)
     setElapsed(Math.max(0, Math.min(duration, frame / bug.fps)))
+  }
+
+  function setLogLayoutPersisted(next) {
+    setLogLayout(next)
+    window.localStorage.setItem(LOG_LAYOUT_STORAGE_KEY, next)
   }
 
   function handleConfirmDelete() {
@@ -146,22 +160,40 @@ export default function BugDetailPage({
         )}
 
         {hasVideo ? (
-          // 動画を左、操作ログを右に並べる2カラムレイアウト。コンテンツ幅が狭いときは
-          // 自然に縦積みへ折り返す（flex-wrapのみで実現、メディアクエリ不要）。
-          <div className="detail-columns">
-            <div className="detail-col-video">
-              <VideoPlayer
-                duration={duration}
-                elapsed={elapsed}
-                setElapsed={setElapsed}
-                playing={playing}
-                setPlaying={setPlaying}
-              />
+          <>
+            <div className="detail-layout-toggle-row">
+              <div className="view-toggle">
+                <button
+                  type="button"
+                  className={logLayout === 'side' ? 'active' : ''}
+                  onClick={() => setLogLayoutPersisted('side')}
+                >
+                  操作ログを右に
+                </button>
+                <button
+                  type="button"
+                  className={logLayout === 'below' ? 'active' : ''}
+                  onClick={() => setLogLayoutPersisted('below')}
+                >
+                  操作ログを下に
+                </button>
+              </div>
             </div>
-            <div className="detail-col-log">
-              <InputLogStrip bug={bug} elapsed={elapsed} onSelectFrame={handleSelectFrame} />
+            <div className={`detail-columns ${logLayout === 'below' ? 'stacked' : ''}`}>
+              <div className="detail-col-video">
+                <VideoPlayer
+                  duration={duration}
+                  elapsed={elapsed}
+                  setElapsed={setElapsed}
+                  playing={playing}
+                  setPlaying={setPlaying}
+                />
+              </div>
+              <div className="detail-col-log">
+                <InputLogStrip bug={bug} elapsed={elapsed} onSelectFrame={handleSelectFrame} />
+              </div>
             </div>
-          </div>
+          </>
         ) : (
           <div className="no-video-hint">
             録画・入力ログはありません（Web UIから手動作成された報告です）。
