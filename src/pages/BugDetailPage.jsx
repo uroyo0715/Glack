@@ -146,17 +146,22 @@ export default function BugDetailPage({
         )}
 
         {hasVideo ? (
-          <>
-            <VideoPlayer
-              duration={duration}
-              elapsed={elapsed}
-              setElapsed={setElapsed}
-              playing={playing}
-              setPlaying={setPlaying}
-            />
-
-            <InputLogStrip bug={bug} elapsed={elapsed} onSelectFrame={handleSelectFrame} />
-          </>
+          // 動画を左、操作ログを右に並べる2カラムレイアウト。コンテンツ幅が狭いときは
+          // 自然に縦積みへ折り返す（flex-wrapのみで実現、メディアクエリ不要）。
+          <div className="detail-columns">
+            <div className="detail-col-video">
+              <VideoPlayer
+                duration={duration}
+                elapsed={elapsed}
+                setElapsed={setElapsed}
+                playing={playing}
+                setPlaying={setPlaying}
+              />
+            </div>
+            <div className="detail-col-log">
+              <InputLogStrip bug={bug} elapsed={elapsed} onSelectFrame={handleSelectFrame} />
+            </div>
+          </div>
         ) : (
           <div className="no-video-hint">
             録画・入力ログはありません（Web UIから手動作成された報告です）。
