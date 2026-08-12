@@ -11,7 +11,7 @@ const uploadedFiles = []
 
 before(async () => {
   await startServer()
-  project = createProject({ name: 'レポートテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+  project = await createProject({ name: 'レポートテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
 })
 
 after(async () => {
@@ -52,13 +52,13 @@ test('GET /reports requires auth', async () => {
 })
 
 test('GET /reports requires projectId', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/reports`, { headers: { Cookie: cookie } })
   assert.equal(res.status, 400)
 })
 
 test('GET /reports 404s for a project the user is not a member of', async () => {
-  const { cookie } = createAuthCookie() // レポートテスト用プロジェクトの非メンバー
+  const { cookie } = await createAuthCookie() // レポートテスト用プロジェクトの非メンバー
   const res = await fetch(`${getBaseUrl()}/reports?projectId=${project.id}`, { headers: { Cookie: cookie } })
   assert.equal(res.status, 404)
 })
@@ -140,7 +140,7 @@ test('POST /reports enforces X-Glank-Key when GLANK_API_KEY is set', async () =>
 })
 
 test('GET /reports/:id and PATCH /reports/:id status transition', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()
   uploadedFiles.push(created.videoUrl)
 
@@ -160,7 +160,7 @@ test('GET /reports/:id and PATCH /reports/:id status transition', async () => {
 })
 
 test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after creation', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()
   uploadedFiles.push(created.videoUrl)
 
@@ -199,7 +199,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
 })
 
 test('PATCH /reports/:id rejects empty text fields and unknown frequency, but accepts a custom tag', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()
   uploadedFiles.push(created.videoUrl)
 
@@ -236,8 +236,8 @@ test('PATCH /reports/:id rejects empty text fields and unknown frequency, but ac
 })
 
 test('GET /reports/facets returns distinct build/who values used in the project', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
-  const facetsProject = createProject({ name: 'ファセットテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const facetsProject = await createProject({ name: 'ファセットテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
 
   const first = await (await postReportForm({ projectId: facetsProject.id })).json()
   uploadedFiles.push(first.videoUrl)
@@ -260,7 +260,7 @@ test('GET /reports/facets requires auth and membership', async () => {
   const unauth = await fetch(`${getBaseUrl()}/reports/facets?projectId=${project.id}`)
   assert.equal(unauth.status, 401)
 
-  const stranger = createAuthCookie()
+  const stranger = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/reports/facets?projectId=${project.id}`, {
     headers: { Cookie: stranger.cookie },
   })
@@ -268,7 +268,7 @@ test('GET /reports/facets requires auth and membership', async () => {
 })
 
 test('GET /reports/:id and PATCH /reports/:id 404 for a project the user is not a member of', async () => {
-  const stranger = createAuthCookie()
+  const stranger = await createAuthCookie()
   const created = await (await postReportForm()).json()
   uploadedFiles.push(created.videoUrl)
 
@@ -284,7 +284,7 @@ test('GET /reports/:id and PATCH /reports/:id 404 for a project the user is not 
 })
 
 test('PATCH /reports/:id returns 404 for unknown id', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/reports/999999`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -314,7 +314,7 @@ test('POST /reports/manual requires auth and project membership', async () => {
   })
   assert.equal(unauth.status, 401)
 
-  const { cookie } = createAuthCookie() // 非メンバー
+  const { cookie } = await createAuthCookie() // 非メンバー
   const res = await fetch(`${getBaseUrl()}/reports/manual`, {
     method: 'POST',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -324,7 +324,7 @@ test('POST /reports/manual requires auth and project membership', async () => {
 })
 
 test('POST /reports/manual creates a bug with no video (empty videoUrl, zeroed frame data)', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const res = await fetch(`${getBaseUrl()}/reports/manual`, {
     method: 'POST',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -348,7 +348,7 @@ test('POST /reports/manual creates a bug with no video (empty videoUrl, zeroed f
 })
 
 test('POST /reports/manual validates required fields, and accepts a custom tag', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
 
   const missing = await fetch(`${getBaseUrl()}/reports/manual`, {
     method: 'POST',
@@ -369,12 +369,12 @@ test('POST /reports/manual validates required fields, and accepts a custom tag',
 })
 
 test('DELETE /reports/:id deletes the report and requires membership', async () => {
-  const { cookie } = createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()
   const videoPath = path.join(import.meta.dirname, '..', created.videoUrl.replace(/^\//, ''))
   assert.equal(fs.existsSync(videoPath), true)
 
-  const stranger = createAuthCookie()
+  const stranger = await createAuthCookie()
   const strangerRes = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
     method: 'DELETE',
     headers: { Cookie: stranger.cookie },
@@ -399,7 +399,7 @@ test('DELETE /reports/:id requires auth and returns 404 for unknown id', async (
   const unauth = await fetch(`${getBaseUrl()}/reports/1`, { method: 'DELETE' })
   assert.equal(unauth.status, 401)
 
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/reports/999999`, { method: 'DELETE', headers: { Cookie: cookie } })
   assert.equal(res.status, 404)
 })

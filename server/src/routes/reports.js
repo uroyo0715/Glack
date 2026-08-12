@@ -32,65 +32,83 @@ function requireApiKey(req, res, next) {
   next()
 }
 
-router.get('/reports', requireAuth, (req, res) => {
-  const { projectId, status, tag, platform, build, who, q } = req.query
-  if (!projectId) {
-    return res.status(400).json({ error: 'projectId is required' })
-  }
-  if (!isProjectMember(Number(projectId), req.user.email)) {
-    return res.status(404).json({ error: 'not found' })
-  }
-  res.json(listBugs({ projectId: Number(projectId), status, tag, platform, build, who, q }))
-})
+router.get(
+  '/reports',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { projectId, status, tag, platform, build, who, q } = req.query
+    if (!projectId) {
+      return res.status(400).json({ error: 'projectId is required' })
+    }
+    if (!(await isProjectMember(Number(projectId), req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    res.json(await listBugs({ projectId: Number(projectId), status, tag, platform, build, who, q }))
+  })
+)
 
-router.get('/reports/facets', requireAuth, (req, res) => {
-  const { projectId } = req.query
-  if (!projectId) {
-    return res.status(400).json({ error: 'projectId is required' })
-  }
-  if (!isProjectMember(Number(projectId), req.user.email)) {
-    return res.status(404).json({ error: 'not found' })
-  }
-  res.json(listReportFacets(Number(projectId)))
-})
+router.get(
+  '/reports/facets',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { projectId } = req.query
+    if (!projectId) {
+      return res.status(400).json({ error: 'projectId is required' })
+    }
+    if (!(await isProjectMember(Number(projectId), req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    res.json(await listReportFacets(Number(projectId)))
+  })
+)
 
-router.get('/reports/:id', requireAuth, (req, res) => {
-  const bug = getBugById(Number(req.params.id))
-  if (!bug || !isProjectMember(bug.projectId, req.user.email)) {
-    return res.status(404).json({ error: 'not found' })
-  }
-  res.json(bug)
-})
+router.get(
+  '/reports/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const bug = await getBugById(Number(req.params.id))
+    if (!bug || !(await isProjectMember(bug.projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    res.json(bug)
+  })
+)
 
 const EDITABLE_TEXT_FIELDS = ['title', 'tag', 'desc', 'who', 'build', 'platform']
 
-router.patch('/reports/:id', requireAuth, (req, res) => {
-  const id = Number(req.params.id)
-  const existing = getBugById(id)
-  if (!existing || !isProjectMember(existing.projectId, req.user.email)) {
-    return res.status(404).json({ error: 'not found' })
-  }
-  const { status, title, tag, desc, who, build, platform, frequency } = req.body ?? {}
+router.patch(
+  '/reports/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id)
+    const existing = await getBugById(id)
+    if (!existing || !(await isProjectMember(existing.projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const { status, title, tag, desc, who, build, platform, frequency } = req.body ?? {}
 
-  const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
-  if (emptyField) {
-    return res.status(400).json({ error: `${emptyField} cannot be empty` })
-  }
-  if (frequency != null && !FREQUENCY_LABELS[frequency]) {
-    return res.status(400).json({ error: `unknown frequency: ${frequency}` })
-  }
+    const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
+    if (emptyField) {
+      return res.status(400).json({ error: `${emptyField} cannot be empty` })
+    }
+    if (frequency != null && !FREQUENCY_LABELS[frequency]) {
+      return res.status(400).json({ error: `unknown frequency: ${frequency}` })
+    }
 
-  const hasFieldUpdates = [title, tag, desc, who, build, platform, frequency].some((v) => v != null)
+    const hasFieldUpdates = [title, tag, desc, who, build, platform, frequency].some((v) => v != null)
 
-  let updated
-  if (status) updated = updateBugStatus(id, status)
-  if (hasFieldUpdates) updated = updateBugFields(id, { title, tag, desc, who, build, platform, frequency })
-  if (!updated) {
-    const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing
-    updated = existingListItem
-  }
-  res.json(updated)
-})
+    let updated
+    if (status) updated = await updateBugStatus(id, status)
+    if (hasFieldUpdates) {
+      updated = await updateBugFields(id, { title, tag, desc, who, build, platform, frequency })
+    }
+    if (!updated) {
+      const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing
+      updated = existingListItem
+    }
+    res.json(updated)
+  })
+)
 
 router.post(
   '/reports',
@@ -119,7 +137,7 @@ router.post(
     if (missing.length > 0) {
       return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
     }
-    if (!getProjectById(metadata.projectId)) {
+    if (!(await getProjectById(metadata.projectId))) {
       return res.status(400).json({ error: `unknown projectId: ${metadata.projectId}` })
     }
     const frequency = metadata.frequency || 'unknown'
@@ -132,7 +150,7 @@ router.post(
 
     const { videoUrl } = await saveVideo(req.file.buffer, req.file.originalname)
 
-    const bug = createBug({
+    const bug = await createBug({
       projectId: metadata.projectId,
       title: metadata.title,
       tag: metadata.tag,
@@ -153,49 +171,53 @@ router.post(
 
 // Unity SDK（動画あり）とは別に、Web UIから動画なしで手動作成するための経路。
 // Unity連携がまだの場合や、動画を取り損ねた場合のテキストのみ報告用。
-router.post('/reports/manual', requireAuth, (req, res) => {
-  const body = req.body ?? {}
-  const required = ['projectId', 'title', 'tag', 'desc', 'who', 'build', 'platform']
-  const missing = required.filter((key) => body[key] == null || body[key] === '')
-  if (missing.length > 0) {
-    return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
-  }
-  if (!isProjectMember(Number(body.projectId), req.user.email)) {
-    return res.status(404).json({ error: 'not found' })
-  }
-  const frequency = body.frequency || 'unknown'
-  if (!FREQUENCY_LABELS[frequency]) {
-    return res.status(400).json({ error: `unknown frequency: ${frequency}` })
-  }
+router.post(
+  '/reports/manual',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {}
+    const required = ['projectId', 'title', 'tag', 'desc', 'who', 'build', 'platform']
+    const missing = required.filter((key) => body[key] == null || body[key] === '')
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
+    }
+    if (!(await isProjectMember(Number(body.projectId), req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const frequency = body.frequency || 'unknown'
+    if (!FREQUENCY_LABELS[frequency]) {
+      return res.status(400).json({ error: `unknown frequency: ${frequency}` })
+    }
 
-  const bug = createBug({
-    projectId: Number(body.projectId),
-    title: body.title,
-    tag: body.tag,
-    tagLabel: resolveTagLabel(body.tag),
-    desc: body.desc,
-    who: body.who,
-    build: body.build,
-    platform: body.platform,
-    frequency,
-    videoUrl: '', // 動画なし。フロント側は空文字を「録画なし」として扱う
-    fps: 0,
-    durationFrames: 0,
-    inputs: [],
+    const bug = await createBug({
+      projectId: Number(body.projectId),
+      title: body.title,
+      tag: body.tag,
+      tagLabel: resolveTagLabel(body.tag),
+      desc: body.desc,
+      who: body.who,
+      build: body.build,
+      platform: body.platform,
+      frequency,
+      videoUrl: '', // 動画なし。フロント側は空文字を「録画なし」として扱う
+      fps: 0,
+      durationFrames: 0,
+      inputs: [],
+    })
+    res.status(201).json(bug)
   })
-  res.status(201).json(bug)
-})
+)
 
 router.delete(
   '/reports/:id',
   requireAuth,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id)
-    const existing = getBugById(id)
-    if (!existing || !isProjectMember(existing.projectId, req.user.email)) {
+    const existing = await getBugById(id)
+    if (!existing || !(await isProjectMember(existing.projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    const result = deleteBug(id)
+    const result = await deleteBug(id)
     if (result?.deletedVideoUrl) {
       await deleteFile(result.deletedVideoUrl)
     }

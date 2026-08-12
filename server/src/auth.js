@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
 import { createSessionRecord, deleteSessionRecord, getUserBySessionToken } from './data.js'
+import { asyncHandler } from './asyncHandler.js'
 
 const SESSION_COOKIE = 'glank_session'
 const OAUTH_STATE_COOKIE = 'glank_oauth_state'
@@ -16,14 +17,14 @@ export const googleClient = new OAuth2Client(
   GOOGLE_REDIRECT_URI
 )
 
-export function createSession(googleId) {
+export async function createSession(googleId) {
   const token = crypto.randomBytes(32).toString('hex')
-  createSessionRecord(token, googleId)
+  await createSessionRecord(token, googleId)
   return token
 }
 
-export function destroySession(token) {
-  deleteSessionRecord(token)
+export async function destroySession(token) {
+  await deleteSessionRecord(token)
 }
 
 function parseCookies(req) {
@@ -41,7 +42,7 @@ export function getSessionToken(req) {
   return parseCookies(req)[SESSION_COOKIE]
 }
 
-export function getSessionUser(req) {
+export async function getSessionUser(req) {
   const token = getSessionToken(req)
   if (!token) return null
   return getUserBySessionToken(token)
@@ -75,12 +76,12 @@ export function clearOAuthStateCookie(res) {
   res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`)
 }
 
-export function requireAuth(req, res, next) {
-  const user = getSessionUser(req)
+export const requireAuth = asyncHandler(async (req, res, next) => {
+  const user = await getSessionUser(req)
   if (!user) return res.status(401).json({ error: 'login required' })
   req.user = user
   next()
-}
+})
 
 export function toPublicUser(user) {
   return { email: user.email, displayName: user.displayName }

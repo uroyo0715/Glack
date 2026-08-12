@@ -22,8 +22,8 @@ export function resolveTagLabel(tag) {
 
 function rowToListItem(row) {
   return {
-    id: row.id,
-    projectId: row.projectId,
+    id: Number(row.id),
+    projectId: Number(row.projectId),
     title: row.title,
     tag: row.tag,
     tagLabel: row.tagLabel,
@@ -36,147 +36,153 @@ function rowToListItem(row) {
   }
 }
 
-function loadInputs(bugId) {
-  return db
-    .prepare('SELECT frame, key, label, holdFrames FROM bugInputs WHERE bugId = ? ORDER BY seq')
-    .all(bugId)
-    .map(({ frame, key, label, holdFrames }) =>
-      holdFrames == null ? { frame, key, label } : { frame, key, label, holdFrames }
-    )
+async function loadInputs(bugId) {
+  const { rows } = await db.execute({
+    sql: 'SELECT frame, key, label, holdFrames FROM bugInputs WHERE bugId = ? ORDER BY seq',
+    args: [bugId],
+  })
+  return rows.map(({ frame, key, label, holdFrames }) =>
+    holdFrames == null
+      ? { frame: Number(frame), key, label }
+      : { frame: Number(frame), key, label, holdFrames: Number(holdFrames) }
+  )
 }
 
-function rowToFullBug(row) {
+async function rowToFullBug(row) {
   return {
     ...rowToListItem(row),
     videoUrl: row.videoUrl,
-    fps: row.fps,
-    durationFrames: row.durationFrames,
-    inputs: loadInputs(row.id),
+    fps: Number(row.fps),
+    durationFrames: Number(row.durationFrames),
+    inputs: await loadInputs(row.id),
   }
 }
 
-export function listBugs({ projectId, status, tag, platform, build, who, q } = {}) {
+export async function listBugs({ projectId, status, tag, platform, build, who, q } = {}) {
   let sql = 'SELECT * FROM bugs WHERE 1=1'
-  const params = []
+  const args = []
   if (projectId) {
     sql += ' AND projectId = ?'
-    params.push(projectId)
+    args.push(projectId)
   }
   if (status) {
     sql += ' AND status = ?'
-    params.push(status)
+    args.push(status)
   }
   if (tag) {
     sql += ' AND tag = ?'
-    params.push(tag)
+    args.push(tag)
   }
   if (platform) {
     sql += ' AND platform = ?'
-    params.push(platform)
+    args.push(platform)
   }
   if (build) {
     sql += ' AND build = ?'
-    params.push(build)
+    args.push(build)
   }
   if (who) {
     sql += ' AND who = ?'
-    params.push(who)
+    args.push(who)
   }
   if (q) {
     sql += ' AND (LOWER(title) LIKE ? OR LOWER(description) LIKE ?)'
     const needle = `%${String(q).toLowerCase()}%`
-    params.push(needle, needle)
+    args.push(needle, needle)
   }
-  return db
-    .prepare(sql)
-    .all(...params)
-    .map(rowToListItem)
+  const { rows } = await db.execute({ sql, args })
+  return rows.map(rowToListItem)
 }
 
 /** カンバン/テーブルの絞り込みUI用に、プロジェクト内で実際に使われているビルド・報告者の一覧を返す */
-export function listReportFacets(projectId) {
-  const builds = db
-    .prepare("SELECT DISTINCT build FROM bugs WHERE projectId = ? AND build != '' ORDER BY build")
-    .all(projectId)
-    .map((r) => r.build)
-  const whos = db
-    .prepare("SELECT DISTINCT who FROM bugs WHERE projectId = ? AND who != '' ORDER BY who")
-    .all(projectId)
-    .map((r) => r.who)
-  return { builds, whos }
+export async function listReportFacets(projectId) {
+  const [buildsResult, whosResult] = await Promise.all([
+    db.execute({
+      sql: "SELECT DISTINCT build FROM bugs WHERE projectId = ? AND build != '' ORDER BY build",
+      args: [projectId],
+    }),
+    db.execute({
+      sql: "SELECT DISTINCT who FROM bugs WHERE projectId = ? AND who != '' ORDER BY who",
+      args: [projectId],
+    }),
+  ])
+  return {
+    builds: buildsResult.rows.map((r) => r.build),
+    whos: whosResult.rows.map((r) => r.who),
+  }
 }
 
-export function getBugById(id) {
-  const row = db.prepare('SELECT * FROM bugs WHERE id = ?').get(id)
-  return row ? rowToFullBug(row) : null
+export async function getBugById(id) {
+  const { rows } = await db.execute({ sql: 'SELECT * FROM bugs WHERE id = ?', args: [id] })
+  return rows[0] ? await rowToFullBug(rows[0]) : null
 }
 
-export function updateBugStatus(id, status) {
-  db.prepare('UPDATE bugs SET status = ? WHERE id = ?').run(status, id)
-  const row = db.prepare('SELECT * FROM bugs WHERE id = ?').get(id)
-  return row ? rowToListItem(row) : null
+export async function updateBugStatus(id, status) {
+  await db.execute({ sql: 'UPDATE bugs SET status = ? WHERE id = ?', args: [status, id] })
+  const { rows } = await db.execute({ sql: 'SELECT * FROM bugs WHERE id = ?', args: [id] })
+  return rows[0] ? rowToListItem(rows[0]) : null
 }
 
 // 動画・入力ログ以外の報告メタデータ（タイトル・ビルドバージョン等）は報告後も編集できる。
 // 渡されたフィールドだけを更新する（部分更新）。
-export function updateBugFields(id, { title, tag, desc, who, build, platform, frequency } = {}) {
+export async function updateBugFields(id, { title, tag, desc, who, build, platform, frequency } = {}) {
   const sets = []
-  const params = []
+  const args = []
   if (title != null) {
     sets.push('title = ?')
-    params.push(title)
+    args.push(title)
   }
   if (tag != null) {
     sets.push('tag = ?', 'tagLabel = ?')
-    params.push(tag, resolveTagLabel(tag))
+    args.push(tag, resolveTagLabel(tag))
   }
   if (desc != null) {
     sets.push('description = ?')
-    params.push(desc)
+    args.push(desc)
   }
   if (who != null) {
     sets.push('who = ?')
-    params.push(who)
+    args.push(who)
   }
   if (build != null) {
     sets.push('build = ?')
-    params.push(build)
+    args.push(build)
   }
   if (platform != null) {
     sets.push('platform = ?')
-    params.push(platform)
+    args.push(platform)
   }
   if (frequency != null) {
     sets.push('frequency = ?')
-    params.push(frequency)
+    args.push(frequency)
   }
   if (sets.length > 0) {
-    params.push(id)
-    db.prepare(`UPDATE bugs SET ${sets.join(', ')} WHERE id = ?`).run(...params)
+    args.push(id)
+    await db.execute({ sql: `UPDATE bugs SET ${sets.join(', ')} WHERE id = ?`, args })
   }
-  const row = db.prepare('SELECT * FROM bugs WHERE id = ?').get(id)
-  return row ? rowToListItem(row) : null
+  const { rows } = await db.execute({ sql: 'SELECT * FROM bugs WHERE id = ?', args: [id] })
+  return rows[0] ? rowToListItem(rows[0]) : null
 }
 
 /** バグ報告を削除する。存在しなければnullを返す。動画ファイル自体の削除は呼び出し側（storage.js）で行う。 */
-export function deleteBug(id) {
-  const row = db.prepare('SELECT videoUrl FROM bugs WHERE id = ?').get(id)
-  if (!row) return null
+export async function deleteBug(id) {
+  const { rows } = await db.execute({ sql: 'SELECT videoUrl FROM bugs WHERE id = ?', args: [id] })
+  if (!rows[0]) return null
 
-  db.exec('BEGIN')
+  const tx = await db.transaction('write')
   try {
-    db.prepare('DELETE FROM bugInputs WHERE bugId = ?').run(id)
-    db.prepare('DELETE FROM bugs WHERE id = ?').run(id)
-    db.exec('COMMIT')
+    await tx.execute({ sql: 'DELETE FROM bugInputs WHERE bugId = ?', args: [id] })
+    await tx.execute({ sql: 'DELETE FROM bugs WHERE id = ?', args: [id] })
+    await tx.commit()
   } catch (err) {
-    db.exec('ROLLBACK')
+    await tx.rollback()
     throw err
   }
 
-  return { deletedVideoUrl: row.videoUrl }
+  return { deletedVideoUrl: rows[0].videoUrl }
 }
 
-export function createBug({
+export async function createBug({
   projectId,
   title,
   tag,
@@ -191,40 +197,28 @@ export function createBug({
   durationFrames,
   inputs,
 }) {
-  db.exec('BEGIN')
+  const tx = await db.transaction('write')
   let bugId
   try {
-    const result = db
-      .prepare(
-        `INSERT INTO bugs
+    const result = await tx.execute({
+      sql: `INSERT INTO bugs
           (projectId, title, tag, tagLabel, status, description, who, build, platform, frequency, videoUrl, fps, durationFrames)
-         VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        projectId,
-        title,
-        tag,
-        tagLabel,
-        desc,
-        who,
-        build,
-        platform,
-        frequency,
-        videoUrl,
-        fps,
-        durationFrames
-      )
-
-    bugId = result.lastInsertRowid
-    const insertInput = db.prepare(
-      'INSERT INTO bugInputs (bugId, seq, frame, key, label, holdFrames) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-    inputs.forEach((input, seq) => {
-      insertInput.run(bugId, seq, input.frame, input.key, input.label, input.holdFrames ?? null)
+         VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [projectId, title, tag, tagLabel, desc, who, build, platform, frequency, videoUrl, fps, durationFrames],
     })
-    db.exec('COMMIT')
+    bugId = result.lastInsertRowid
+
+    let seq = 0
+    for (const input of inputs) {
+      await tx.execute({
+        sql: 'INSERT INTO bugInputs (bugId, seq, frame, key, label, holdFrames) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [bugId, seq, input.frame, input.key, input.label, input.holdFrames ?? null],
+      })
+      seq += 1
+    }
+    await tx.commit()
   } catch (err) {
-    db.exec('ROLLBACK')
+    await tx.rollback()
     throw err
   }
 
@@ -232,145 +226,166 @@ export function createBug({
 }
 
 function rowToProject(row) {
-  return { id: row.id, name: row.name, imageUrl: row.imageUrl, bugCount: row.bugCount }
+  return {
+    id: Number(row.id),
+    name: row.name,
+    imageUrl: row.imageUrl,
+    bugCount: Number(row.bugCount),
+  }
 }
 
 /** ログインしているだけの全ユーザーではなく、そのプロジェクトのメンバーだけが一覧に出す。 */
-export function listProjectsForUser(email) {
-  return db
-    .prepare(
-      `SELECT p.*, (SELECT COUNT(*) FROM bugs WHERE bugs.projectId = p.id) AS bugCount
-       FROM projects p
-       JOIN projectMembers m ON m.projectId = p.id
-       WHERE m.email = ?
-       ORDER BY p.id`
-    )
-    .all(normalizeEmail(email))
-    .map(rowToProject)
+export async function listProjectsForUser(email) {
+  const { rows } = await db.execute({
+    sql: `SELECT p.*, (SELECT COUNT(*) FROM bugs WHERE bugs.projectId = p.id) AS bugCount
+          FROM projects p
+          JOIN projectMembers m ON m.projectId = p.id
+          WHERE m.email = ?
+          ORDER BY p.id`,
+    args: [normalizeEmail(email)],
+  })
+  return rows.map(rowToProject)
 }
 
-export function getProjectById(id) {
-  const row = db
-    .prepare(
-      `SELECT p.*, (SELECT COUNT(*) FROM bugs WHERE bugs.projectId = p.id) AS bugCount
-       FROM projects p WHERE p.id = ?`
-    )
-    .get(id)
-  return row ? rowToProject(row) : null
+export async function getProjectById(id) {
+  const { rows } = await db.execute({
+    sql: `SELECT p.*, (SELECT COUNT(*) FROM bugs WHERE bugs.projectId = p.id) AS bugCount
+          FROM projects p WHERE p.id = ?`,
+    args: [id],
+  })
+  return rows[0] ? rowToProject(rows[0]) : null
 }
 
 function normalizeEmail(email) {
   return String(email).trim().toLowerCase()
 }
 
-export function isProjectMember(projectId, email) {
-  const row = db
-    .prepare('SELECT 1 FROM projectMembers WHERE projectId = ? AND email = ?')
-    .get(projectId, normalizeEmail(email))
-  return !!row
+export async function isProjectMember(projectId, email) {
+  const { rows } = await db.execute({
+    sql: 'SELECT 1 FROM projectMembers WHERE projectId = ? AND email = ?',
+    args: [projectId, normalizeEmail(email)],
+  })
+  return rows.length > 0
 }
 
 /**
  * メンバー一覧。displayNameはそのemailで一度でもログインしたことがあれば入るが、
  * 招待されただけでまだ一度もログインしていないメンバーはnullになる
  * （フロント側でその場合はemailを表示にフォールバックする）。
- * @returns {{ email: string, displayName: string | null }[]}
+ * @returns {Promise<{ email: string, displayName: string | null }[]>}
  */
-export function listProjectMembers(projectId) {
-  return db
-    .prepare(
-      `SELECT pm.email AS email, u.displayName AS displayName
-       FROM projectMembers pm
-       LEFT JOIN users u ON u.email = pm.email
-       WHERE pm.projectId = ?
-       ORDER BY pm.addedAt`
-    )
-    .all(projectId)
+export async function listProjectMembers(projectId) {
+  const { rows } = await db.execute({
+    sql: `SELECT pm.email AS email, u.displayName AS displayName
+          FROM projectMembers pm
+          LEFT JOIN users u ON u.email = pm.email
+          WHERE pm.projectId = ?
+          ORDER BY pm.addedAt`,
+    args: [projectId],
+  })
+  return rows.map((r) => ({ email: r.email, displayName: r.displayName }))
 }
 
-/** @returns {string[]} 実際に追加された（＝既存メンバーでなかった）メールアドレス */
-export function addProjectMembers(projectId, emails) {
-  const insert = db.prepare(
-    'INSERT OR IGNORE INTO projectMembers (projectId, email, addedAt) VALUES (?, ?, ?)'
-  )
+/** @returns {Promise<string[]>} 実際に追加された（＝既存メンバーでなかった）メールアドレス */
+export async function addProjectMembers(projectId, emails) {
   const now = new Date().toISOString()
   const added = []
   for (const rawEmail of emails) {
     const email = normalizeEmail(rawEmail)
     if (!email) continue
-    const result = insert.run(projectId, email, now)
-    if (result.changes > 0) added.push(email)
+    const result = await db.execute({
+      sql: 'INSERT OR IGNORE INTO projectMembers (projectId, email, addedAt) VALUES (?, ?, ?)',
+      args: [projectId, email, now],
+    })
+    if (result.rowsAffected > 0) added.push(email)
   }
   return added
 }
 
-export function countProjectMembers(projectId) {
-  return db.prepare('SELECT COUNT(*) AS n FROM projectMembers WHERE projectId = ?').get(projectId).n
+export async function countProjectMembers(projectId) {
+  const { rows } = await db.execute({
+    sql: 'SELECT COUNT(*) AS n FROM projectMembers WHERE projectId = ?',
+    args: [projectId],
+  })
+  return Number(rows[0].n)
 }
 
-/** @returns {boolean} 実際に削除できたか（もともとメンバーでなければfalse） */
-export function removeProjectMember(projectId, email) {
-  const result = db
-    .prepare('DELETE FROM projectMembers WHERE projectId = ? AND email = ?')
-    .run(projectId, normalizeEmail(email))
-  return result.changes > 0
+/** @returns {Promise<boolean>} 実際に削除できたか（もともとメンバーでなければfalse） */
+export async function removeProjectMember(projectId, email) {
+  const result = await db.execute({
+    sql: 'DELETE FROM projectMembers WHERE projectId = ? AND email = ?',
+    args: [projectId, normalizeEmail(email)],
+  })
+  return result.rowsAffected > 0
 }
 
-export function createProject({ name, imageUrl, creatorEmail }) {
-  const result = db
-    .prepare('INSERT INTO projects (name, imageUrl) VALUES (?, ?)')
-    .run(name, imageUrl ?? null)
+export async function createProject({ name, imageUrl, creatorEmail }) {
+  const result = await db.execute({
+    sql: 'INSERT INTO projects (name, imageUrl) VALUES (?, ?)',
+    args: [name, imageUrl ?? null],
+  })
   const projectId = result.lastInsertRowid
-  addProjectMembers(projectId, [creatorEmail])
+  await addProjectMembers(projectId, [creatorEmail])
   return getProjectById(projectId)
 }
 
 /**
  * 指定したプロジェクトと、その配下のバグ報告・入力ログをまとめて削除する。
  * @param {number[]} ids
- * @returns {{ deletedProjectIds: number[], deletedVideoUrls: string[] }}
+ * @returns {Promise<{ deletedProjectIds: number[], deletedVideoUrls: string[] }>}
  */
-export function deleteProjects(ids) {
+export async function deleteProjects(ids) {
   if (!Array.isArray(ids) || ids.length === 0) {
     return { deletedProjectIds: [], deletedVideoUrls: [] }
   }
   const placeholders = ids.map(() => '?').join(',')
 
-  const existingIds = db
-    .prepare(`SELECT id FROM projects WHERE id IN (${placeholders})`)
-    .all(...ids)
-    .map((r) => r.id)
+  const { rows: existingRows } = await db.execute({
+    sql: `SELECT id FROM projects WHERE id IN (${placeholders})`,
+    args: ids,
+  })
+  const existingIds = existingRows.map((r) => Number(r.id))
   if (existingIds.length === 0) {
     return { deletedProjectIds: [], deletedVideoUrls: [] }
   }
   const existingPlaceholders = existingIds.map(() => '?').join(',')
 
-  const deletedVideoUrls = db
-    .prepare(`SELECT videoUrl FROM bugs WHERE projectId IN (${existingPlaceholders})`)
-    .all(...existingIds)
-    .map((r) => r.videoUrl)
+  const { rows: videoRows } = await db.execute({
+    sql: `SELECT videoUrl FROM bugs WHERE projectId IN (${existingPlaceholders})`,
+    args: existingIds,
+  })
+  const deletedVideoUrls = videoRows.map((r) => r.videoUrl)
 
-  db.exec('BEGIN')
+  const tx = await db.transaction('write')
   try {
-    db.prepare(
-      `DELETE FROM bugInputs WHERE bugId IN (SELECT id FROM bugs WHERE projectId IN (${existingPlaceholders}))`
-    ).run(...existingIds)
-    db.prepare(`DELETE FROM bugs WHERE projectId IN (${existingPlaceholders})`).run(...existingIds)
-    db.prepare(`DELETE FROM projectMembers WHERE projectId IN (${existingPlaceholders})`).run(
-      ...existingIds
-    )
-    db.prepare(`DELETE FROM projects WHERE id IN (${existingPlaceholders})`).run(...existingIds)
-    db.exec('COMMIT')
+    await tx.execute({
+      sql: `DELETE FROM bugInputs WHERE bugId IN (SELECT id FROM bugs WHERE projectId IN (${existingPlaceholders}))`,
+      args: existingIds,
+    })
+    await tx.execute({
+      sql: `DELETE FROM bugs WHERE projectId IN (${existingPlaceholders})`,
+      args: existingIds,
+    })
+    await tx.execute({
+      sql: `DELETE FROM projectMembers WHERE projectId IN (${existingPlaceholders})`,
+      args: existingIds,
+    })
+    await tx.execute({
+      sql: `DELETE FROM projects WHERE id IN (${existingPlaceholders})`,
+      args: existingIds,
+    })
+    await tx.commit()
   } catch (err) {
-    db.exec('ROLLBACK')
+    await tx.rollback()
     throw err
   }
 
   return { deletedProjectIds: existingIds, deletedVideoUrls }
 }
 
-export function findUserByGoogleId(googleId) {
-  return db.prepare('SELECT * FROM users WHERE googleId = ?').get(googleId) ?? null
+export async function findUserByGoogleId(googleId) {
+  const { rows } = await db.execute({ sql: 'SELECT * FROM users WHERE googleId = ?', args: [googleId] })
+  return rows[0] ?? null
 }
 
 /**
@@ -378,41 +393,41 @@ export function findUserByGoogleId(googleId) {
  * displayName は「登録後もいつでも変更できる、表示名としての役割」を持つフィールドで、
  * 初期値はGoogleプロフィールの名前。ログインID自体はgoogleId（不変）で、emailは表示・連絡用の付随情報。
  */
-export function findOrCreateUser({ googleId, email, name }) {
-  const existing = findUserByGoogleId(googleId)
+export async function findOrCreateUser({ googleId, email, name }) {
+  const existing = await findUserByGoogleId(googleId)
   if (existing) return existing
-  db.prepare('INSERT INTO users (googleId, email, displayName) VALUES (?, ?, ?)').run(
-    googleId,
-    email,
-    name || email
-  )
+  await db.execute({
+    sql: 'INSERT INTO users (googleId, email, displayName) VALUES (?, ?, ?)',
+    args: [googleId, email, name || email],
+  })
   return findUserByGoogleId(googleId)
 }
 
-export function updateDisplayName(googleId, displayName) {
-  db.prepare('UPDATE users SET displayName = ? WHERE googleId = ?').run(displayName, googleId)
+export async function updateDisplayName(googleId, displayName) {
+  await db.execute({
+    sql: 'UPDATE users SET displayName = ? WHERE googleId = ?',
+    args: [displayName, googleId],
+  })
   return findUserByGoogleId(googleId)
 }
 
-export function createSessionRecord(token, googleId) {
-  db.prepare('INSERT INTO sessions (token, googleId, createdAt) VALUES (?, ?, ?)').run(
-    token,
-    googleId,
-    new Date().toISOString()
-  )
+export async function createSessionRecord(token, googleId) {
+  await db.execute({
+    sql: 'INSERT INTO sessions (token, googleId, createdAt) VALUES (?, ?, ?)',
+    args: [token, googleId, new Date().toISOString()],
+  })
 }
 
-export function deleteSessionRecord(token) {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
+export async function deleteSessionRecord(token) {
+  await db.execute({ sql: 'DELETE FROM sessions WHERE token = ?', args: [token] })
 }
 
-export function getUserBySessionToken(token) {
-  const row = db
-    .prepare(
-      `SELECT users.* FROM sessions
-       JOIN users ON users.googleId = sessions.googleId
-       WHERE sessions.token = ?`
-    )
-    .get(token)
-  return row ?? null
+export async function getUserBySessionToken(token) {
+  const { rows } = await db.execute({
+    sql: `SELECT users.* FROM sessions
+          JOIN users ON users.googleId = sessions.googleId
+          WHERE sessions.token = ?`,
+    args: [token],
+  })
+  return rows[0] ?? null
 }

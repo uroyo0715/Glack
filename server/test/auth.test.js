@@ -11,7 +11,7 @@ test('GET /auth/me without a session returns 401', async () => {
 })
 
 test('GET /auth/me with a valid session returns the public user shape', async () => {
-  const { cookie, user } = createAuthCookie({ email: 'me@example.com', name: '確認太郎' })
+  const { cookie, user } = await createAuthCookie({ email: 'me@example.com', name: '確認太郎' })
   const res = await fetch(`${getBaseUrl()}/auth/me`, { headers: { Cookie: cookie } })
   assert.equal(res.status, 200)
   const body = await res.json()
@@ -27,7 +27,7 @@ test('PATCH /auth/me updates displayName and requires auth', async () => {
   })
   assert.equal(unauth.status, 401)
 
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/auth/me`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -42,7 +42,7 @@ test('PATCH /auth/me updates displayName and requires auth', async () => {
 })
 
 test('PATCH /auth/me rejects an empty displayName', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/auth/me`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -52,7 +52,7 @@ test('PATCH /auth/me rejects an empty displayName', async () => {
 })
 
 test('POST /auth/logout clears the session so subsequent requests are unauthenticated', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const beforeLogout = await fetch(`${getBaseUrl()}/auth/me`, { headers: { Cookie: cookie } })
   assert.equal(beforeLogout.status, 200)
 

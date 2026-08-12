@@ -11,7 +11,7 @@ test('GET /projects requires auth', async () => {
 })
 
 test('POST /projects requires a name', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const form = new FormData()
   const res = await fetch(`${getBaseUrl()}/projects`, {
     method: 'POST',
@@ -22,7 +22,7 @@ test('POST /projects requires a name', async () => {
 })
 
 test('POST /projects creates a project without an image, then GET /projects lists it', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const form = new FormData()
   form.set('name', 'Playwright Test Project')
 
@@ -52,7 +52,7 @@ test('DELETE /projects requires auth', async () => {
 })
 
 test('DELETE /projects validates the ids body', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
   const res = await fetch(`${getBaseUrl()}/projects`, {
     method: 'DELETE',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -69,7 +69,7 @@ test('DELETE /projects validates the ids body', async () => {
 })
 
 test('DELETE /projects removes the project(s) and they no longer appear in GET /projects', async () => {
-  const { cookie } = createAuthCookie()
+  const { cookie } = await createAuthCookie()
 
   const createOne = async (name) => {
     const form = new FormData()
@@ -111,8 +111,8 @@ async function createProjectAs(cookie, name) {
 }
 
 test('a user cannot see another user’s project in GET /projects', async () => {
-  const owner = createAuthCookie()
-  const stranger = createAuthCookie()
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
 
   const project = await createProjectAs(owner.cookie, '他人には見せないプロジェクト')
 
@@ -126,8 +126,8 @@ test('a user cannot see another user’s project in GET /projects', async () => 
 })
 
 test('a user cannot delete another user’s project via DELETE /projects', async () => {
-  const owner = createAuthCookie()
-  const stranger = createAuthCookie()
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, '削除されたくないプロジェクト')
 
   const res = await fetch(`${getBaseUrl()}/projects`, {
@@ -146,8 +146,8 @@ test('a user cannot delete another user’s project via DELETE /projects', async
 })
 
 test('GET/POST /projects/:id/members require membership, and bulk-add works case-insensitively', async () => {
-  const owner = createAuthCookie()
-  const stranger = createAuthCookie()
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, 'メンバー管理テスト')
 
   const strangerGet = await fetch(`${getBaseUrl()}/projects/${project.id}/members`, {
@@ -174,7 +174,7 @@ test('GET/POST /projects/:id/members require membership, and bulk-add works case
 
   // 招待されたメンバーは、まだ一度もログインしていなくても（＝Google未認証でも）
   // 自分のメールでログインした瞬間にそのプロジェクトが見えるようになる
-  const invited = createAuthCookie({ email: 'teammate@example.com' })
+  const invited = await createAuthCookie({ email: 'teammate@example.com' })
   const invitedList = await (
     await fetch(`${getBaseUrl()}/projects`, { headers: { Cookie: invited.cookie } })
   ).json()
@@ -182,7 +182,7 @@ test('GET/POST /projects/:id/members require membership, and bulk-add works case
 })
 
 test('POST /projects/:id/members validates the emails body', async () => {
-  const owner = createAuthCookie()
+  const owner = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, 'バリデーションテスト')
 
   const res = await fetch(`${getBaseUrl()}/projects/${project.id}/members`, {
@@ -194,8 +194,8 @@ test('POST /projects/:id/members validates the emails body', async () => {
 })
 
 test('DELETE /projects/:id/members removes a member and requires membership to call it', async () => {
-  const owner = createAuthCookie()
-  const stranger = createAuthCookie()
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, '削除メンバーテスト')
 
   await fetch(`${getBaseUrl()}/projects/${project.id}/members`, {
@@ -222,7 +222,7 @@ test('DELETE /projects/:id/members removes a member and requires membership to c
 })
 
 test('DELETE /projects/:id/members refuses to remove the last remaining member', async () => {
-  const owner = createAuthCookie()
+  const owner = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, '最後の1人テスト')
 
   const res = await fetch(`${getBaseUrl()}/projects/${project.id}/members`, {

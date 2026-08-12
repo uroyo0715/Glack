@@ -1,18 +1,28 @@
-import { DatabaseSync } from 'node:sqlite'
+import { createClient } from '@libsql/client'
 import path from 'node:path'
 
-// テストからは GLANK_DB_PATH=:memory: を指定して、実データを一切触らずに実行できるようにする。
-const DB_PATH = process.env.GLANK_DB_PATH || path.join(import.meta.dirname, '..', 'glank.sqlite')
+// 本番はTurso（TURSO_DATABASE_URL/TURSO_AUTH_TOKENを設定）、それ以外（開発・テスト）は
+// ローカルのsqliteファイルを使う。どちらも同じ@libsql/client経由なのでアプリ側のコードは
+// 環境によって分岐する必要がない。
+// 注: GLANK_DB_PATH=:memory: は使わない。@libsql/client のローカルsqlite3バックエンドでは
+// db.transaction() が新しい接続を作る際に :memory: だと別の空DBに切り替わってしまい、
+// トランザクション後の全クエリが壊れる（実際に確認済み）。テストはファイルベースの一時DBを使う
+// （test/setup.mjs参照）。
+function resolveDbUrl() {
+  if (process.env.TURSO_DATABASE_URL) return process.env.TURSO_DATABASE_URL
+  const p = process.env.GLANK_DB_PATH || path.join(import.meta.dirname, '..', 'glank.sqlite')
+  return `file:${p}`
+}
 
-export const db = new DatabaseSync(DB_PATH)
+const DB_URL = resolveDbUrl()
+export const isRemoteDb = /^(libsql|https?):\/\//.test(DB_URL)
 
-// 注: WALジャーナルモード（PRAGMA journal_mode = WAL）はクラッシュ耐性の観点では望ましいが、
-// このWindows開発環境では *-wal / *-shm への書き込みが `node --watch-path=src` の
-// 再起動トリガーに巻き込まれ、起動するたびに無限リスタートするという実害があったため見送っている
-// （server/ 直下にできるファイルで src/ の外のはずだが、実際に再起動が起きることを確認済み）。
-// 既定のrollbackジャーナルのままで運用する。
+export const db = createClient({
+  url: DB_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
 
-db.exec(`
+await db.executeMultiple(`
   CREATE TABLE IF NOT EXISTS users (
     googleId TEXT PRIMARY KEY,
     email TEXT NOT NULL,
@@ -74,50 +84,50 @@ db.exec(`
 
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。
-function migrateAddProjectIdIfNeeded() {
-  const columns = db.prepare('PRAGMA table_info(bugs)').all()
+async function migrateAddProjectIdIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(bugs)')
   const hasProjectId = columns.some((c) => c.name === 'projectId')
   if (hasProjectId) return
 
-  let defaultProject = db.prepare('SELECT id FROM projects ORDER BY id LIMIT 1').get()
-  let projectId = defaultProject?.id
+  const { rows: existingProjects } = await db.execute('SELECT id FROM projects ORDER BY id LIMIT 1')
+  let projectId = existingProjects[0]?.id
   if (!projectId) {
-    projectId = db
-      .prepare('INSERT INTO projects (name, imageUrl) VALUES (?, ?)')
-      .run('Nightfall Trail', null).lastInsertRowid
+    const result = await db.execute({
+      sql: 'INSERT INTO projects (name, imageUrl) VALUES (?, ?)',
+      args: ['Nightfall Trail', null],
+    })
+    projectId = result.lastInsertRowid
   }
-  db.exec(`ALTER TABLE bugs ADD COLUMN projectId INTEGER NOT NULL DEFAULT ${Number(projectId)}`)
+  await db.execute(`ALTER TABLE bugs ADD COLUMN projectId INTEGER NOT NULL DEFAULT ${Number(projectId)}`)
 }
 
-migrateAddProjectIdIfNeeded()
+await migrateAddProjectIdIfNeeded()
 
 // マイグレーション: メンバー制導入前に作られたプロジェクトは誰もメンバーになっていない
 // （＝誰からも見えなくなってしまう）ため、既存ユーザー全員を既存プロジェクト全ての
 // メンバーとして登録し、導入前と同じ見え方を維持する。以降の新規プロジェクトは
 // 作成者だけがメンバーになる。
-function migrateBackfillProjectMembers() {
-  const projectsWithoutMembers = db
-    .prepare(
-      `SELECT id FROM projects WHERE id NOT IN (SELECT DISTINCT projectId FROM projectMembers)`
-    )
-    .all()
+async function migrateBackfillProjectMembers() {
+  const { rows: projectsWithoutMembers } = await db.execute(
+    'SELECT id FROM projects WHERE id NOT IN (SELECT DISTINCT projectId FROM projectMembers)'
+  )
   if (projectsWithoutMembers.length === 0) return
 
-  const users = db.prepare('SELECT email FROM users').all()
+  const { rows: users } = await db.execute('SELECT email FROM users')
   if (users.length === 0) return
 
-  const insertMember = db.prepare(
-    'INSERT OR IGNORE INTO projectMembers (projectId, email, addedAt) VALUES (?, ?, ?)'
-  )
   const now = new Date().toISOString()
   for (const project of projectsWithoutMembers) {
     for (const user of users) {
-      insertMember.run(project.id, user.email.toLowerCase(), now)
+      await db.execute({
+        sql: 'INSERT OR IGNORE INTO projectMembers (projectId, email, addedAt) VALUES (?, ?, ?)',
+        args: [project.id, user.email.toLowerCase(), now],
+      })
     }
   }
 }
 
-migrateBackfillProjectMembers()
+await migrateBackfillProjectMembers()
 
 const SEED_BUGS = [
   {
@@ -291,26 +301,24 @@ const SEED_BUGS = [
   },
 ]
 
-function seedIfEmpty() {
+async function seedIfEmpty() {
   // users はGoogleログイン時に findOrCreateUser() で自動作成されるためシード不要。
 
-  const projectCount = db.prepare('SELECT COUNT(*) AS n FROM projects').get().n
-  if (projectCount === 0) {
-    const projectId = db
-      .prepare('INSERT INTO projects (name, imageUrl) VALUES (?, ?)')
-      .run('Nightfall Trail', null).lastInsertRowid
+  const { rows } = await db.execute('SELECT COUNT(*) AS n FROM projects')
+  if (rows[0].n !== 0) return
 
-    const insertBug = db.prepare(`
-      INSERT INTO bugs
-        (projectId, title, tag, tagLabel, status, description, who, build, platform, frequency, videoUrl, fps, durationFrames)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const insertInput = db.prepare(`
-      INSERT INTO bugInputs (bugId, seq, frame, key, label, holdFrames) VALUES (?, ?, ?, ?, ?, ?)
-    `)
+  const projectResult = await db.execute({
+    sql: 'INSERT INTO projects (name, imageUrl) VALUES (?, ?)',
+    args: ['Nightfall Trail', null],
+  })
+  const projectId = projectResult.lastInsertRowid
 
-    for (const seedBug of SEED_BUGS) {
-      const result = insertBug.run(
+  for (const seedBug of SEED_BUGS) {
+    const bugResult = await db.execute({
+      sql: `INSERT INTO bugs
+          (projectId, title, tag, tagLabel, status, description, who, build, platform, frequency, videoUrl, fps, durationFrames)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
         projectId,
         seedBug.title,
         seedBug.tag,
@@ -323,14 +331,19 @@ function seedIfEmpty() {
         seedBug.frequency,
         seedBug.videoUrl,
         seedBug.fps,
-        seedBug.durationFrames
-      )
-      const bugId = result.lastInsertRowid
-      seedBug.inputs.forEach((input, seq) => {
-        insertInput.run(bugId, seq, input.frame, input.key, input.label, input.holdFrames ?? null)
+        seedBug.durationFrames,
+      ],
+    })
+    const bugId = bugResult.lastInsertRowid
+    let seq = 0
+    for (const input of seedBug.inputs) {
+      await db.execute({
+        sql: 'INSERT INTO bugInputs (bugId, seq, frame, key, label, holdFrames) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [bugId, seq, input.frame, input.key, input.label, input.holdFrames ?? null],
       })
+      seq += 1
     }
   }
 }
 
-seedIfEmpty()
+await seedIfEmpty()

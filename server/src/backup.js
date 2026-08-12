@@ -1,9 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { db } from './db.js'
+import { db, isRemoteDb } from './db.js'
 
 // SQLiteファイルを直接コピーすると書き込み中の破損コピーを取ってしまう恐れがあるため、
 // `VACUUM INTO` で一貫性のあるスナップショットを作る（書き込みをブロックせず安全に取得できる）。
+// Turso（リモートDB）を使っている場合はTurso側が永続性・バックアップを管理するため、
+// このローカルファイルバックアップは意味がなく何もしない。
 const BACKUP_DIR = path.join(import.meta.dirname, '..', 'backups')
 const RETENTION_COUNT = 14 // 直近14世代だけ残す
 
@@ -11,10 +13,11 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-export function runBackup() {
+export async function runBackup() {
+  if (isRemoteDb) return null
   fs.mkdirSync(BACKUP_DIR, { recursive: true })
   const dest = path.join(BACKUP_DIR, `glank-${timestamp()}.sqlite`)
-  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`)
+  await db.execute(`VACUUM INTO '${dest.replace(/'/g, "''")}'`)
   pruneOldBackups()
   return dest
 }
@@ -37,5 +40,7 @@ function pruneOldBackups() {
  * @param {number} intervalMs バックアップ間隔（既定6時間）
  */
 export function startBackupSchedule(intervalMs = 6 * 60 * 60 * 1000) {
-  setInterval(runBackup, intervalMs).unref()
+  setInterval(() => {
+    runBackup().catch((err) => console.error('[Glank] backup failed:', err))
+  }, intervalMs).unref()
 }

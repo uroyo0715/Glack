@@ -22,13 +22,13 @@ export function getBaseUrl() {
 }
 
 /** テスト用ユーザーを作成し、認証済みリクエストに使えるCookie文字列を返す。 */
-export function createAuthCookie(overrides = {}) {
+export async function createAuthCookie(overrides = {}) {
   userCounter += 1
-  const user = findOrCreateUser({
+  const user = await findOrCreateUser({
     googleId: overrides.googleId ?? `test-google-id-${userCounter}`,
     email: overrides.email ?? `test${userCounter}@example.com`,
     name: overrides.name ?? `Test User ${userCounter}`,
   })
-  const token = createSession(user.googleId)
+  const token = await createSession(user.googleId)
   return { cookie: `glank_session=${token}`, user }
 }
