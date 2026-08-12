@@ -1,0 +1,13 @@
+node_modules/
+dist/
+
+# secrets
+.env
+server/.env
+client_secret_*.json
+
+# server runtime data / uploads / backups
+server/*.sqlite
+server/*.sqlite.*
+server/backups/
+server/uploads/

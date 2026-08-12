@@ -1,0 +1,8 @@
+{
+  "name": "com.glank.sdk",
+  "version": "0.1.0",
+  "displayName": "Glank Bug Report SDK",
+  "unity": "2021.3",
+  "description": "Glank向けの入力ログ記録 + バグ報告送信SDK。UPMのローカル/embeddedパッケージとして追加できます。",
+  "keywords": ["bug-report", "qa", "glank"]
+}

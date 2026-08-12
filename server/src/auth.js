@@ -1,0 +1,87 @@
+import crypto from 'node:crypto'
+import { OAuth2Client } from 'google-auth-library'
+import { createSessionRecord, deleteSessionRecord, getUserBySessionToken } from './data.js'
+
+const SESSION_COOKIE = 'glank_session'
+const OAUTH_STATE_COOKIE = 'glank_oauth_state'
+
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+export const GOOGLE_REDIRECT_URI =
+  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8787/api/v1/auth/google/callback'
+export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173/'
+
+export const googleClient = new OAuth2Client(
+  GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI
+)
+
+export function createSession(googleId) {
+  const token = crypto.randomBytes(32).toString('hex')
+  createSessionRecord(token, googleId)
+  return token
+}
+
+export function destroySession(token) {
+  deleteSessionRecord(token)
+}
+
+function parseCookies(req) {
+  const header = req.get('Cookie')
+  if (!header) return {}
+  return Object.fromEntries(
+    header.split(';').map((pair) => {
+      const idx = pair.indexOf('=')
+      return [pair.slice(0, idx).trim(), decodeURIComponent(pair.slice(idx + 1).trim())]
+    })
+  )
+}
+
+export function getSessionToken(req) {
+  return parseCookies(req)[SESSION_COOKIE]
+}
+
+export function getSessionUser(req) {
+  const token = getSessionToken(req)
+  if (!token) return null
+  return getUserBySessionToken(token)
+}
+
+export function setSessionCookie(res, token) {
+  // ローカル開発(http)を想定し Secure は付けない。本番では Secure; SameSite=Strict 等に強化する。
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 7}`
+  )
+}
+
+export function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`)
+}
+
+// OAuth CSRF対策: /auth/google でstateを短命Cookieに保存し、/auth/google/callback で照合する。
+export function getOAuthState(req) {
+  return parseCookies(req)[OAUTH_STATE_COOKIE]
+}
+
+export function setOAuthStateCookie(res, state) {
+  res.setHeader(
+    'Set-Cookie',
+    `${OAUTH_STATE_COOKIE}=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`
+  )
+}
+
+export function clearOAuthStateCookie(res) {
+  res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`)
+}
+
+export function requireAuth(req, res, next) {
+  const user = getSessionUser(req)
+  if (!user) return res.status(401).json({ error: 'login required' })
+  req.user = user
+  next()
+}
+
+export function toPublicUser(user) {
+  return { email: user.email, displayName: user.displayName }
+}

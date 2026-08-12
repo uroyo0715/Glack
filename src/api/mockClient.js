@@ -1,0 +1,240 @@
+import { bugs as seedBugs, TAG_OPTIONS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+import { projects as seedProjects } from '../data/mockProjects.js'
+
+const TAG_LABELS = Object.fromEntries(TAG_OPTIONS.map((t) => [t.key, t.label]))
+const FREQUENCY_KEYS = new Set(FREQUENCY_OPTIONS.map((f) => f.key))
+// 種類（tag）はプリセット以外の自由記述も許可する（サーバーのresolveTagLabelと同じ挙動）
+const resolveTagLabel = (tag) => TAG_LABELS[tag] ?? tag
+
+// バックエンド未接続時に client.js と同じインターフェースを提供するダミー実装
+let bugs = seedBugs.map((b) => ({ ...b }))
+let projects = seedProjects.map((p) => ({ ...p }))
+let nextProjectId = projects.length + 1
+let nextBugId = Math.max(0, ...bugs.map((b) => b.id)) + 1
+// projectId -> {email, displayName}[]。モックはユーザーが1人しかいないため実際のアクセス制御はしないが、
+// メンバー一覧UIの動作確認はできるようにしておく。招待されただけのメンバーはdisplayName: null
+// （実バックエンドで「まだ一度もログインしていない」ケースを模す）。
+const membersByProject = new Map(
+  projects.map((p) => [p.id, [{ email: 'demo@example.com', displayName: 'デモユーザー' }]])
+)
+
+const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// バックエンド未接続時は実際のGoogle OAuthを行えないため、固定のダミーユーザーで即ログインする。
+let currentUser = null
+
+/** @returns {Promise<{email: string, displayName: string}>} */
+export async function loginWithGoogle() {
+  await delay(300)
+  currentUser = { email: 'demo@example.com', displayName: 'デモユーザー' }
+  return currentUser
+}
+
+export async function logout() {
+  await delay(50)
+  currentUser = null
+}
+
+/** @returns {Promise<{email: string, displayName: string} | null>} */
+export async function me() {
+  await delay(50)
+  return currentUser
+}
+
+/** @returns {Promise<{email: string, displayName: string}>} */
+export async function updateDisplayName(displayName) {
+  await delay(100)
+  requireLogin()
+  currentUser = { ...currentUser, displayName }
+  return currentUser
+}
+
+function toListItem({ inputs, videoUrl, fps, durationFrames, ...rest }) {
+  return rest
+}
+
+function requireLogin() {
+  if (!currentUser) throw new Error('login required')
+}
+
+/** @returns {Promise<{id: number, name: string, imageUrl: string | null, bugCount: number}[]>} */
+export async function fetchProjects() {
+  await delay()
+  requireLogin()
+  return projects.map((p) => ({
+    ...p,
+    bugCount: bugs.filter((b) => b.projectId === p.id).length,
+  }))
+}
+
+/** @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
+export async function createProject(name, imageFile) {
+  await delay(150)
+  requireLogin()
+  if (!name || !name.trim()) throw new Error('name is required')
+  // ダミー実装ではファイルをどこにも送らずローカルのオブジェクトURLを即席で使う
+  const imageUrl = imageFile ? URL.createObjectURL(imageFile) : null
+  const project = { id: nextProjectId++, name: name.trim(), imageUrl }
+  projects = [...projects, project]
+  membersByProject.set(project.id, [{ email: currentUser.email, displayName: currentUser.displayName }])
+  return project
+}
+
+/** @returns {Promise<{email: string, displayName: string | null}[]>} */
+export async function fetchProjectMembers(projectId) {
+  await delay(100)
+  requireLogin()
+  return membersByProject.get(Number(projectId)) ?? []
+}
+
+/** @returns {Promise<{added: string[], members: {email: string, displayName: string | null}[]}>} */
+export async function addProjectMembers(projectId, emails) {
+  await delay(150)
+  requireLogin()
+  const id = Number(projectId)
+  const current = membersByProject.get(id) ?? []
+  const existingEmails = new Set(current.map((m) => m.email))
+  const added = []
+  for (const raw of emails) {
+    const email = String(raw).trim().toLowerCase()
+    if (!email || existingEmails.has(email)) continue
+    existingEmails.add(email)
+    added.push(email)
+    current.push({ email, displayName: null }) // モックでは招待されただけの人はまだログインしていない扱い
+  }
+  membersByProject.set(id, current)
+  return { added, members: current }
+}
+
+/** @returns {Promise<{members: {email: string, displayName: string | null}[]}>} */
+export async function removeProjectMember(projectId, email) {
+  await delay(100)
+  requireLogin()
+  const id = Number(projectId)
+  const target = String(email).trim().toLowerCase()
+  const current = membersByProject.get(id) ?? []
+  if (current.length <= 1) throw new Error('cannot remove the last member of a project')
+  const next = current.filter((m) => m.email !== target)
+  membersByProject.set(id, next)
+  return { members: next }
+}
+
+/** @returns {Promise<{deletedProjectIds: number[]}>} */
+export async function deleteProjects(ids) {
+  await delay(150)
+  requireLogin()
+  const idSet = new Set(ids.map(Number))
+  const deletedProjectIds = projects.filter((p) => idSet.has(p.id)).map((p) => p.id)
+  projects = projects.filter((p) => !idSet.has(p.id))
+  bugs = bugs.filter((b) => !idSet.has(b.projectId))
+  deletedProjectIds.forEach((id) => membersByProject.delete(id))
+  return { deletedProjectIds }
+}
+
+/** @returns {Promise<import('./types.js').BugListItem[]>} */
+export async function fetchReports(filters = {}) {
+  await delay()
+  requireLogin()
+  let result = bugs
+  if (filters.projectId) result = result.filter((b) => b.projectId === Number(filters.projectId))
+  if (filters.status) result = result.filter((b) => b.status === filters.status)
+  if (filters.tag) result = result.filter((b) => b.tag === filters.tag)
+  if (filters.platform) result = result.filter((b) => b.platform === filters.platform)
+  if (filters.build) result = result.filter((b) => b.build === filters.build)
+  if (filters.who) result = result.filter((b) => b.who === filters.who)
+  if (filters.q) {
+    const q = filters.q.toLowerCase()
+    result = result.filter(
+      (b) => b.title.toLowerCase().includes(q) || b.desc.toLowerCase().includes(q)
+    )
+  }
+  return result.map(toListItem)
+}
+
+/** 一覧のビルド/報告者プルダウン用に、プロジェクト内で実際に使われている値を返す。
+ * @returns {Promise<{builds: string[], whos: string[]}>} */
+export async function fetchReportFacets(projectId) {
+  await delay(80)
+  requireLogin()
+  const projectBugs = bugs.filter((b) => b.projectId === Number(projectId))
+  const builds = [...new Set(projectBugs.map((b) => b.build).filter(Boolean))].sort()
+  const whos = [...new Set(projectBugs.map((b) => b.who).filter(Boolean))].sort()
+  return { builds, whos }
+}
+
+/** @returns {Promise<import('./types.js').Bug>} */
+export async function createManualReport(projectId, fields) {
+  await delay(150)
+  requireLogin()
+  const required = ['title', 'tag', 'desc', 'who', 'build', 'platform']
+  const missing = required.filter((key) => !fields[key])
+  if (missing.length > 0) throw new Error(`missing fields: ${missing.join(', ')}`)
+  const frequency = fields.frequency || 'unknown'
+  if (!FREQUENCY_KEYS.has(frequency)) throw new Error(`unknown frequency: ${frequency}`)
+
+  const bug = {
+    id: nextBugId++,
+    projectId: Number(projectId),
+    title: fields.title,
+    tag: fields.tag,
+    tagLabel: resolveTagLabel(fields.tag),
+    status: 'todo',
+    desc: fields.desc,
+    who: fields.who,
+    build: fields.build,
+    platform: fields.platform,
+    frequency,
+    videoUrl: '',
+    fps: 0,
+    durationFrames: 0,
+    inputs: [],
+  }
+  bugs = [...bugs, bug]
+  return bug
+}
+
+/** @returns {Promise<import('./types.js').Bug>} */
+export async function fetchReport(id) {
+  await delay()
+  requireLogin()
+  const bug = bugs.find((b) => String(b.id) === String(id))
+  if (!bug) throw new Error(`fetchReport: not found (${id})`)
+  return bug
+}
+
+/** @returns {Promise<import('./types.js').BugListItem>} */
+export async function updateReportStatus(id, status) {
+  await delay(100)
+  requireLogin()
+  bugs = bugs.map((b) => (String(b.id) === String(id) ? { ...b, status } : b))
+  return toListItem(bugs.find((b) => String(b.id) === String(id)))
+}
+
+const EDITABLE_TEXT_FIELDS = ['title', 'tag', 'desc', 'who', 'build', 'platform']
+
+/** 報告後にタイトル・ビルドバージョン等のメタデータを直すための部分更新。渡したフィールドだけ更新される。
+ * @returns {Promise<import('./types.js').BugListItem>} */
+export async function updateReportFields(id, fields) {
+  await delay(100)
+  requireLogin()
+  const emptyField = EDITABLE_TEXT_FIELDS.find((key) => fields[key] === '')
+  if (emptyField) throw new Error(`${emptyField} cannot be empty`)
+  if (fields.frequency != null && !FREQUENCY_KEYS.has(fields.frequency)) {
+    throw new Error(`unknown frequency: ${fields.frequency}`)
+  }
+
+  const patch = { ...fields }
+  if (patch.tag != null) patch.tagLabel = resolveTagLabel(patch.tag)
+  bugs = bugs.map((b) => (String(b.id) === String(id) ? { ...b, ...patch } : b))
+  return toListItem(bugs.find((b) => String(b.id) === String(id)))
+}
+
+/** バグ報告を削除する（録画・入力ログも含めて完全に削除、取り消し不可）。 */
+export async function deleteReport(id) {
+  await delay(150)
+  requireLogin()
+  const exists = bugs.some((b) => String(b.id) === String(id))
+  if (!exists) throw new Error(`deleteReport: not found (${id})`)
+  bugs = bugs.filter((b) => String(b.id) !== String(id))
+  return { deleted: true }
+}

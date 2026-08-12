@@ -1,0 +1,26 @@
+import * as realClient from './client.js'
+import * as mockClient from './mockClient.js'
+
+// VITE_API_BASE_URL が未設定の間はモッククライアントにフォールバックする。
+// バックエンドが立ったら .env に VITE_API_BASE_URL を設定するだけで切り替わる。
+const impl = import.meta.env.VITE_API_BASE_URL ? realClient : mockClient
+
+export const {
+  fetchProjects,
+  createProject,
+  deleteProjects,
+  fetchProjectMembers,
+  addProjectMembers,
+  removeProjectMember,
+  fetchReports,
+  fetchReport,
+  fetchReportFacets,
+  updateReportStatus,
+  updateReportFields,
+  deleteReport,
+  createManualReport,
+  loginWithGoogle,
+  logout,
+  me,
+  updateDisplayName,
+} = impl

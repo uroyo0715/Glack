@@ -1,0 +1,212 @@
+import React, { useState, useEffect, useRef } from 'react'
+import VideoPlayer from '../components/VideoPlayer.jsx'
+import InputLogStrip from '../components/InputLogStrip.jsx'
+import EditReportForm from '../components/EditReportForm.jsx'
+import { STATUS_COLUMNS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
+
+function frequencyLabel(key) {
+  return FREQUENCY_OPTIONS.find((f) => f.key === key)?.label ?? key
+}
+
+const WIDTH_STORAGE_KEY = 'glank-detail-width'
+const MIN_DETAIL_WIDTH = 480
+const DEFAULT_DETAIL_WIDTH = 1080
+const PAGE_HORIZONTAL_MARGIN = 92 // .detail-pageのpadding等、コンテンツ幅として使えない余白の目安
+
+function loadStoredWidth() {
+  if (typeof window === 'undefined') return DEFAULT_DETAIL_WIDTH
+  const n = Number(window.localStorage.getItem(WIDTH_STORAGE_KEY))
+  return Number.isFinite(n) && n >= MIN_DETAIL_WIDTH ? n : DEFAULT_DETAIL_WIDTH
+}
+
+export default function BugDetailPage({
+  bug,
+  onStatusChange,
+  onUpdateReport,
+  buildOptions,
+  onFetchMembers,
+  onDeleteReport,
+}) {
+  const [elapsed, setElapsed] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
+  const [detailWidth, setDetailWidth] = useState(loadStoredWidth)
+  const [resizingWidth, setResizingWidth] = useState(false)
+  const resizeDragRef = useRef(null) // { startX, startWidth }
+  const hasVideo = Boolean(bug.videoUrl)
+  const duration = hasVideo ? bug.durationFrames / bug.fps : 0
+
+  // reset playback state when switching to a different bug
+  useEffect(() => {
+    setElapsed(0)
+    setPlaying(false)
+    setEditing(false)
+    setConfirmingDelete(false)
+    setDeleteError(null)
+  }, [bug.id])
+
+  function handleSelectFrame(frame) {
+    setPlaying(false)
+    setElapsed(Math.max(0, Math.min(duration, frame / bug.fps)))
+  }
+
+  function handleConfirmDelete() {
+    setDeleting(true)
+    setDeleteError(null)
+    onDeleteReport(bug.id)
+      .catch((err) => {
+        setDeleteError(err.message ?? String(err))
+        setDeleting(false)
+      })
+  }
+
+  // 詳細ページの幅をドラッグで調整できるようにする。選んだ幅はブラウザに保存し、次回以降も引き継ぐ。
+  function handleResizePointerDown(e) {
+    resizeDragRef.current = { startX: e.clientX, startWidth: detailWidth }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setResizingWidth(true)
+  }
+
+  function handleResizePointerMove(e) {
+    if (!resizeDragRef.current) return
+    const { startX, startWidth } = resizeDragRef.current
+    const maxWidth = window.innerWidth - PAGE_HORIZONTAL_MARGIN
+    const next = Math.min(maxWidth, Math.max(MIN_DETAIL_WIDTH, startWidth + (e.clientX - startX)))
+    setDetailWidth(next)
+  }
+
+  function handleResizePointerUp(e) {
+    if (!resizeDragRef.current) return
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    resizeDragRef.current = null
+    setResizingWidth(false)
+    window.localStorage.setItem(WIDTH_STORAGE_KEY, String(detailWidth))
+  }
+
+  return (
+    <main className="detail-page">
+      <div
+        className={`detail-content ${resizingWidth ? 'resizing' : ''}`}
+        style={{ width: `${detailWidth}px`, maxWidth: '100%' }}
+      >
+        <div className="header">
+          <div className="header-top">
+            <div className="eyebrow">{bug.tagLabel}</div>
+            <div className="header-actions">
+              <button type="button" className="edit-toggle" onClick={() => setEditing((v) => !v)}>
+                {editing ? '編集をやめる' : '編集'}
+              </button>
+              <button
+                type="button"
+                className="edit-toggle delete-toggle"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                削除
+              </button>
+            </div>
+          </div>
+          <h1>{bug.title}</h1>
+          <div className="desc">{bug.desc}</div>
+        </div>
+
+        {confirmingDelete && (
+          <div className="delete-confirm">
+            <p>
+              この報告「{bug.title}」を削除します。録画・入力ログも含めて完全に削除され、
+              <strong>この操作は取り消せません。</strong>
+            </p>
+            {deleteError && <div className="project-form-error">{deleteError}</div>}
+            <div className="delete-confirm-actions">
+              <button
+                type="button"
+                className="delete-confirm-danger"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? '削除中...' : '削除する'}
+              </button>
+              <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+
+        {editing && (
+          <EditReportForm
+            bug={bug}
+            buildOptions={buildOptions}
+            onFetchMembers={onFetchMembers}
+            onUpdate={onUpdateReport}
+            onClose={() => setEditing(false)}
+          />
+        )}
+
+        {hasVideo ? (
+          <>
+            <VideoPlayer
+              duration={duration}
+              elapsed={elapsed}
+              setElapsed={setElapsed}
+              playing={playing}
+              setPlaying={setPlaying}
+            />
+
+            <InputLogStrip bug={bug} elapsed={elapsed} onSelectFrame={handleSelectFrame} />
+          </>
+        ) : (
+          <div className="no-video-hint">
+            録画・入力ログはありません（Web UIから手動作成された報告です）。
+          </div>
+        )}
+
+        <div className="meta-row">
+          <div className="meta-item">
+            <div className="k">報告者</div>
+            <div className="v">{bug.who}</div>
+          </div>
+          <div className="meta-item">
+            <div className="k">ビルド</div>
+            <div className="v mono">{bug.build}</div>
+          </div>
+          <div className="meta-item">
+            <div className="k">プラットフォーム</div>
+            <div className="v">{bug.platform}</div>
+          </div>
+          <div className="meta-item">
+            <div className="k">発生頻度</div>
+            <div className="v">{frequencyLabel(bug.frequency)}</div>
+          </div>
+        </div>
+
+        <div className="status-row">
+          <div className="k">ステータス</div>
+          <select
+            className="status-select"
+            value={bug.status}
+            onChange={(e) => onStatusChange(bug.id, e.target.value)}
+          >
+            {STATUS_COLUMNS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div
+          className="detail-resize-handle"
+          title="ドラッグして幅を調整"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerUp}
+        >
+          <div className="detail-resize-grip" />
+        </div>
+      </div>
+    </main>
+  )
+}
