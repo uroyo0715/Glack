@@ -18,13 +18,27 @@ Glankへ入力ログ付きバグ報告を送信するための最小SDK。
   （プロジェクトを跨いだ複数ゲーム運用を想定していないため、通常はゲームごとに固定値でよい）。
 - `InputLogRecorder.cs` — 直近nバッファ秒分の入力をリングバッファで保持し続けるMonoBehaviour。
   監視するキーを `watchedKeys`（`KeyCode` + Glank上の表示グリフ + ラベル）に登録する。
+  レガシー `Input` クラスを使う（新Input Systemを使う場合は下記
+  `InputLogRecorderNewInputSystem.cs` を参照）。
+- `InputLogRecorderNewInputSystem.cs` — 新Input System（`com.unity.inputsystem`）版の
+  `InputLogRecorder`。`Keyboard.current`を使う点以外は同じ挙動。ファイル全体が
+  `#if ENABLE_INPUT_SYSTEM` で囲ってあるため、Input Systemパッケージを導入していない
+  プロジェクトでは単純に無視される（コンパイルエラーにならない）。
 - `BugReportTrigger.cs` — ホットキー（デフォルト `F12`）でバグ報告を送信するサンプル実装。
   既定では `replayWatcher`（`ReplayFolderWatcher`）が直近の録画ファイルを自動検出する。
   別の取得方法を使いたい場合は `GetLatestClipPath` に関数を差し込めば上書きできる。
+  入力ログの取得元も `CaptureInputLog` で差し替え可能（新Input System版を使う場合等）。
 - `ReplayFolderWatcher.cs` — OSのインスタントリプレイ機能が書き出した動画ファイルを検出するヘルパー。
-  詳細は下記「動画録画について」を参照。
+  Windows/macOS/Linuxそれぞれの一般的な保存先が既定値に入る。詳細は下記「動画録画について」を参照。
 - `GlankClient.cs` — `multipart/form-data` で `video` ファイルと `metadata`（JSON文字列）を
-  `POST {baseUrl}/reports` へ送信する。
+  `POST {baseUrl}/reports` へ送信する。送信結果は成功/再送可能な失敗/恒久的な失敗
+  （`GlankSubmitOutcome`）の3種類に分類される。
+- `GlankOfflineQueue.cs` — ネットワーク断やサーバー一時停止で送信できなかった報告を
+  ディスクに退避し、一定間隔で自動的に再送するMonoBehaviour。詳細は下記
+  「送信失敗時のリトライ（GlankOfflineQueue）」を参照。
+- `GlankReportPromptUI.cs` — ホットキーで仮タイトルのまま即送信するのではなく、QA担当が
+  タイトル・種類・詳細・発生頻度を入力してから送信できるようにする簡易フォームのロジック。
+  詳細は下記「QA向け入力フォーム（GlankReportPromptUI）」を参照。
 - `GlankReplayer.cs` — Webアプリのバグ詳細画面「JSONをダウンロード」で書き出した入力ログを
   読み込み、記録時と同じタイミングで再生するMonoBehaviour。バグの再現に使う。詳細は下記
   「入力ログからの再現（GlankReplayer）」を参照。
@@ -48,8 +62,23 @@ SDKはそれらが書き出した動画ファイルを検出するだけにし�
    続けて `BugReportTrigger` のホットキー（既定 `F12`）を押して報告を送信する
 
 ShadowPlayやReLiveを使う場合は、それぞれの設定画面で確認した保存先フォルダを
-`replayWatcher.watchFolders` に追加すればよい。macOS/Linuxではこの既定実装は使えないため、
-`GetLatestClipPath` に別の取得方法（外部キャプチャソフト連携など）を差し込む。
+`replayWatcher.watchFolders` に追加すればよい。
+
+### macOS / Linux について
+
+- **macOS**: `replayWatcher.watchFolders` の既定値は `~/Movies`（QuickTime Playerで
+  画面収録した場合の既定保存先）。OBS等を使う場合はその出力フォルダを追加する。
+- **Linux**: OSの機能としての「インスタントリプレイ」に相当するものが無いため、既定値は
+  空になっている。OBS Studioの「Replay Buffer」機能などサードパーティのツールを使い、
+  その出力フォルダを `replayWatcher.watchFolders` に追加する。
+
+いずれの場合も、`replayWatcher`任せにせず自前の取得方法（外部キャプチャソフト連携等）を
+使いたい場合は `GetLatestClipPath` に差し込めば上書きできる。
+
+**未対応の点**: OSのインスタントリプレイ保存ホットキー（Windowsの`Win+Alt+G`等）と
+`BugReportTrigger`のホットキーの自動連携は行っていない（2つのキーを別々に押す必要がある）。
+OS側のホットキーを自動でシミュレートする実装はプラットフォームごとに大きく異なり壊れやすいため、
+現状は見送っている。
 
 ## セットアップ例
 
@@ -76,8 +105,54 @@ public class BugReportSetup : MonoBehaviour
 
 `F12` を押すと、`InputLogRecorder` が保持している直近の入力ログと
 `GetLatestClipPath()` が返す動画ファイルを合わせて `POST /reports` に送信する。
-タイトルやタグをQA担当者に入力させたい場合は、`BugReportTrigger.SubmitReport(...)` を
-自前のUIから呼び出す形に差し替える。
+
+## 送信失敗時のリトライ（GlankOfflineQueue）
+
+ネットワーク断やサーバーの一時停止で送信に失敗した場合、`BugReportTrigger`に
+`GlankOfflineQueue`をアサインしておくと、その報告（動画ファイルのコピーを含む）を
+`Application.persistentDataPath` 配下に退避し、一定間隔（既定60秒）で自動的に再送する。
+ゲームを再起動してもキューは消えない。
+
+```csharp
+// シーンに GameObject を1つ作り、GlankOfflineQueue をアタッチして
+// BugReportTrigger の offlineQueue にドラッグ&ドロップするだけでよい（コード不要）。
+```
+
+- 4xx等「再送しても直らない」失敗（`GlankSubmitOutcome.PermanentFailure`）はキューに積まれず、
+  従来通りログにエラーが出るだけ（データ自体が不正なため再送しても解決しない）。
+- ネットワーク断や5xx等「再送すれば直るかもしれない」失敗（`RetryableFailure`）だけがキューに積まれる。
+- 何度再送しても`PermanentFailure`になった場合は、`Application.persistentDataPath/GlankQueue/_failed/`
+  に移動される（無限に溜まり続けないようにするため）。中身（`metadata.json`と動画ファイル）は
+  開発者が後から手動で確認できる。
+- `offlineQueue.PendingCount` で待機中の件数、`offlineQueue.FlushNow()` で即座に再送を試みられる。
+
+## QA向け入力フォーム（GlankReportPromptUI）
+
+既定の`BugReportTrigger`はホットキーを押した瞬間に仮タイトル（`"(quick report)"`）で
+即送信する。QA担当がタイトル・種類・詳細・発生頻度を入力してから送信したい場合は、
+`GlankReportPromptUI`を使う。
+
+**このスクリプトが提供するのはロジックのみ**（Canvas上のUI部品の配置はUnity Editor側の作業のため、
+テキストファイルであるこのSDKには含められない）。以下の構成でHierarchyを組み、
+それぞれのUI部品を`GlankReportPromptUI`のInspectorにアサインする（レガシーUI = `UnityEngine.UI`
+のみを使用、TextMeshPro等の追加パッケージ不要）:
+
+```
+Canvas
+└─ ReportPromptPanel（Image等。GlankReportPromptUIの panelRoot にアサイン）
+   ├─ TitleInputField（InputField）      → titleField
+   ├─ TagDropdown（Dropdown。選択肢: crash / visual / softlock の順） → tagDropdown
+   ├─ DescInputField（InputField, Multi Line） → descField
+   ├─ FrequencyDropdown（Dropdown。選択肢: rare / sometimes / often / always / unknown の順） → frequencyDropdown
+   ├─ SubmitButton（Button）             → submitButton
+   └─ CancelButton（Button）             → cancelButton
+```
+
+`GlankReportPromptUI`自体は`ReportPromptPanel`と同じGameObject、または任意の場所に
+アタッチしてよい。`trigger`に`BugReportTrigger`をアサインし、`BugReportTrigger`側の
+`promptUI`にこの`GlankReportPromptUI`をアサインすると、ホットキーで即送信する代わりに
+このフォームが開くようになる。ゲームを一時停止したい場合は、`Show()`が呼ばれるタイミングを
+フックして`Time.timeScale = 0`にする等、呼び出し側で行う（SDK側では強制しない）。
 
 ## 入力ログからの再現（GlankReplayer）
 
@@ -129,11 +204,12 @@ public class PlayerInput : MonoBehaviour
 
 ## 未対応・今後の検討事項
 
-- macOS/Linux向けのインスタントリプレイ検出（現状`ReplayFolderWatcher`はWindows想定）
 - OSのインスタントリプレイ保存ホットキー（Win+Alt+G等）と`BugReportTrigger`のホットキーの
-  自動連携（現状は2つのキーを別々に押す必要がある）
-- 新Input Systemパッケージへの対応
-- 送信失敗時のリトライ・オフラインキュー
-- QA向け入力用UI（タイトル・タグ入力フォーム）
+  自動連携（現状は2つのキーを別々に押す必要がある。プラットフォームごとのホットキー
+  シミュレーションは壊れやすいため見送っている。詳細は上記「macOS / Linux について」）
+- `GlankReportPromptUI`はロジックのみ提供。実際のCanvas/UI部品の配置はUnity Editor側で
+  手動で組む必要がある（テキストファイルのSDKにUnityプレハブ資産を含められないため）
 - `GlankReplayer` はキー入力の再現のみ対応（乱数シードやゲーム内状態までは復元しないため、
   完全に同一の結果を保証するものではない）
+- macOS/Linuxでの`ReplayFolderWatcher`の既定値は実機での動作確認がまだ済んでいない
+  （Windows/Xbox Game Barでのみ実地確認済み）
