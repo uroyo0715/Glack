@@ -239,6 +239,11 @@ export async function migrateTagToTags(client) {
       args: [JSON.stringify([row.tag]), row.id],
     })
   }
+  // tag/tagLabelはNOT NULL列のまま残っており、新規INSERTがこの2列に値を入れないと
+  // 制約違反になってしまう（実際にこれで新規報告作成がinternal server errorになった）。
+  // バックフィル済みなので、古い列自体を削除して安全にする。
+  await client.execute('ALTER TABLE bugs DROP COLUMN tag')
+  await client.execute('ALTER TABLE bugs DROP COLUMN tagLabel')
 }
 
 await migrateTagToTags(db)
