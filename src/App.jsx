@@ -531,7 +531,7 @@ export default function App() {
         </div>
       ) : (
         // 検索・絞り込みの変更のたびにこのコンポーネントを外して読み込み中パネルに差し替えると、
-        // BugListPage内部のview（テーブル/カンバン）などの状態がリセットされてしまうため、
+        // BugListPage内部のview（テーブル/ボード）などの状態がリセットされてしまうため、
         // 初回読み込みが終わったあとは常にマウントしたままにする（更新中はbugsLoadingで内部通知）。
         <BugListPage
           bugs={bugs}

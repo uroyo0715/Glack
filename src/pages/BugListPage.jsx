@@ -60,7 +60,7 @@ export default function BugListPage({
   // 絞り込みは App.jsx が fetchReports() 呼び出し時にサーバー側（クエリパラメータ）で行う。
   // ここでは取得済みの bugs をそのまま表示する。
   const filtered = bugs
-  // ステータスの絞り込みで外されたタブはカンバンでも列ごと非表示にする（カードだけでなく）。
+  // ステータスの絞り込みで外されたタブはボード表示でも列ごと非表示にする（カードだけでなく）。
   const visibleStatusColumns = STATUS_COLUMNS.filter((col) => statusFilter.includes(col.key))
 
   // self_hostedでTurso未設定の間は、報告機能そのものが使えない（要件）。
@@ -108,7 +108,7 @@ export default function BugListPage({
               onChange={setView}
               options={[
                 { value: 'table', label: 'テーブル' },
-                { value: 'kanban', label: 'カンバン' },
+                { value: 'kanban', label: 'ボード' },
               ]}
             />
           </div>

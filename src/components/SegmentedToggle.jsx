@@ -1,6 +1,6 @@
 import React from 'react'
 
-// 複数箇所（一覧のテーブル/カンバン切替、ログのタイムライン/テキスト切替、
+// 複数箇所（一覧のテーブル/ボード切替、ログのタイムライン/テキスト切替、
 // 詳細ページのログ配置切替）で同じ見た目のトグルが個別に実装されていたのをまとめたもの。
 export default function SegmentedToggle({ options, value, onChange, className = '' }) {
   return (
