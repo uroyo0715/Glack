@@ -488,15 +488,6 @@ body {
 .list-page {
   padding: 26px 34px;
 }
-.list-header .eyebrow,
-.header .eyebrow {
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
 .list-header-row {
   display: flex;
   align-items: center;
@@ -508,7 +499,10 @@ body {
   margin: 0;
   font-weight: 700;
 }
-.view-toggle {
+
+/* 一覧のテーブル/カンバン切替、ログのタイムライン/テキスト切替、詳細ページのログ配置切替で共用する
+   セグメントトグル（以前は箇所ごとに同じ見た目のトグルを別々に定義していた）。 */
+.segmented-toggle {
   display: flex;
   gap: 2px;
   background: var(--surface);
@@ -516,7 +510,7 @@ body {
   border-radius: 8px;
   padding: 3px;
 }
-.view-toggle button {
+.segmented-toggle button {
   background: none;
   border: none;
   color: var(--text-faint);
@@ -527,10 +521,39 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-.view-toggle button.active {
+.segmented-toggle button.active {
   background: var(--surface-3);
   color: var(--text);
 }
+
+/* ヘッダーの機能パネル開閉ボタン（新規報告・メンバー・ストレージ設定）。押下中は
+   segmented-toggleのactiveと似た「押されている」見た目にすることで、開閉のたびに
+   「〜を閉じる」という文言に切り替える必要をなくしている。 */
+.panel-toggle {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--accent-amber);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.panel-toggle:hover {
+  text-decoration: underline;
+}
+.panel-toggle.active {
+  background: var(--surface-3);
+  border-color: var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+.panel-toggle.warning {
+  color: var(--accent-amber);
+  border-color: var(--accent-amber);
+}
+
 .list-header-actions {
   display: flex;
   align-items: center;
@@ -700,16 +723,25 @@ body {
   color: var(--text-dim);
 }
 .storage-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
-  background: var(--surface-3);
   color: var(--text-faint);
 }
+.storage-status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
 .storage-status-badge.ok {
-  background: rgba(111, 207, 151, 0.15);
   color: #6fcf97;
+}
+.storage-status-badge.ok::before {
+  background: #6fcf97;
 }
 .storage-config-form input {
   font-family: inherit;
@@ -1007,27 +1039,30 @@ body {
   padding: 24px 16px;
 }
 
+/* ステータスは淡色ピルではなく左ボーダーの色分けで表す */
 .status-badge {
-  font-size: 10.5px;
-  padding: 3px 9px;
-  border-radius: 20px;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
+  padding-left: 8px;
+  border-left: 3px solid var(--text-faint);
+  color: var(--text-dim);
   display: inline-block;
 }
 .status-badge.todo {
-  background: var(--surface-3);
+  border-color: var(--text-faint);
   color: var(--text-dim);
 }
 .status-badge.in_progress {
-  background: rgba(79, 209, 197, 0.15);
+  border-color: var(--accent-cyan);
   color: var(--accent-cyan);
 }
 .status-badge.review {
-  background: rgba(242, 169, 59, 0.15);
+  border-color: var(--accent-amber);
   color: var(--accent-amber);
 }
 .status-badge.done {
-  background: rgba(111, 207, 151, 0.15);
+  border-color: #6fcf97;
   color: #6fcf97;
 }
 
@@ -1091,27 +1126,49 @@ body {
   gap: 6px;
   align-items: center;
 }
+/* 種類タグは淡色ピルではなく、色スウォッチ+ラベルで表す */
 .tag {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.3px;
-  /* プリセット外の自由記述タグ用のフォールバック（.tag.crash等はこれよりクラス数が多いので上書きする） */
-  background: var(--surface-3);
+  letter-spacing: 0.2px;
   color: var(--text-dim);
 }
+.tag::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  /* プリセット外の自由記述タグ用のフォールバック（.tag.crash等はこれよりクラス数が多いので上書きする） */
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
 .tag.crash {
-  background: rgba(229, 99, 107, 0.15);
   color: var(--accent-red);
 }
+.tag.crash::before {
+  background: var(--accent-red);
+}
 .tag.visual {
-  background: rgba(79, 209, 197, 0.15);
   color: var(--accent-cyan);
 }
+.tag.visual::before {
+  background: var(--accent-cyan);
+}
 .tag.softlock {
-  background: rgba(242, 169, 59, 0.15);
   color: var(--accent-amber);
+}
+.tag.softlock::before {
+  background: var(--accent-amber);
+}
+.detail-tag {
+  font-size: 13px;
+}
+.detail-tag::before {
+  width: 8px;
+  height: 8px;
 }
 .bug-card .who {
   font-size: 11px;
@@ -1411,26 +1468,6 @@ body {
   text-transform: uppercase;
   color: var(--text-faint);
   font-weight: 600;
-}
-.log-view-toggle {
-  display: flex;
-  gap: 4px;
-}
-.log-view-toggle button {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.log-view-toggle button.active {
-  background: var(--accent-cyan);
-  border-color: var(--accent-cyan);
-  color: var(--bg);
 }
 .frame-rail {
   position: relative;

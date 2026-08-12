@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import VideoPlayer from '../components/VideoPlayer.jsx'
 import InputLogStrip from '../components/InputLogStrip.jsx'
 import EditReportForm from '../components/EditReportForm.jsx'
+import SegmentedToggle from '../components/SegmentedToggle.jsx'
 import { STATUS_COLUMNS, FREQUENCY_OPTIONS } from '../data/mockBugs.js'
 
 function frequencyLabel(key) {
@@ -108,7 +109,7 @@ export default function BugDetailPage({
       >
         <div className="header">
           <div className="header-top">
-            <div className="eyebrow">{bug.tagLabel}</div>
+            <span className={`tag detail-tag ${bug.tag}`}>{bug.tagLabel}</span>
             <div className="header-actions">
               <button type="button" className="edit-toggle" onClick={() => setEditing((v) => !v)}>
                 {editing ? '編集をやめる' : '編集'}
@@ -162,22 +163,14 @@ export default function BugDetailPage({
         {hasVideo ? (
           <>
             <div className="detail-layout-toggle-row">
-              <div className="view-toggle">
-                <button
-                  type="button"
-                  className={logLayout === 'side' ? 'active' : ''}
-                  onClick={() => setLogLayoutPersisted('side')}
-                >
-                  操作ログを右に
-                </button>
-                <button
-                  type="button"
-                  className={logLayout === 'below' ? 'active' : ''}
-                  onClick={() => setLogLayoutPersisted('below')}
-                >
-                  操作ログを下に
-                </button>
-              </div>
+              <SegmentedToggle
+                value={logLayout}
+                onChange={setLogLayoutPersisted}
+                options={[
+                  { value: 'side', label: '操作ログを右に' },
+                  { value: 'below', label: '操作ログを下に' },
+                ]}
+              />
             </div>
             <div className={`detail-columns ${logLayout === 'below' ? 'stacked' : ''}`}>
               <div className="detail-col-video">

@@ -79,7 +79,6 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
   return (
     <main className="projects-page">
       <div className="list-header">
-        <div className="eyebrow">Glank</div>
         <div className="list-header-row">
           <h1>プロジェクト</h1>
           <div className="projects-header-actions">

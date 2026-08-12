@@ -4,7 +4,6 @@ export default function HelpPage() {
   return (
     <main className="help-page">
       <div className="list-header">
-        <div className="eyebrow">Glank</div>
         <div className="list-header-row">
           <h1>Unity連携の使い方</h1>
         </div>

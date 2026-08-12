@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import SegmentedToggle from './SegmentedToggle.jsx'
 
 const TOLERANCE_FRAMES = 6 // 60fps基準で約0.1秒
 const COLLIDE_PX = 34 // これより近い入力は段を分けて重なりを避ける（同時押しは何段になってもよい）
@@ -183,17 +184,14 @@ export default function InputLogStrip({ bug, elapsed, onSelectFrame }) {
         <div className="log-strip" ref={logStripRef}>
           <div className="log-strip-head">
             <div className="strip-label">Input Log</div>
-            <div className="log-view-toggle">
-              <button
-                className={view === 'timeline' ? 'active' : ''}
-                onClick={() => setView('timeline')}
-              >
-                タイムライン
-              </button>
-              <button className={view === 'text' ? 'active' : ''} onClick={() => setView('text')}>
-                テキスト
-              </button>
-            </div>
+            <SegmentedToggle
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'timeline', label: 'タイムライン' },
+                { value: 'text', label: 'テキスト' },
+              ]}
+            />
           </div>
 
           {view === 'timeline' ? (

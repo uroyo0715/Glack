@@ -4,6 +4,7 @@ import FilterBar from '../components/FilterBar.jsx'
 import MembersPanel from '../components/MembersPanel.jsx'
 import NewReportForm from '../components/NewReportForm.jsx'
 import StorageSettingsPanel from '../components/StorageSettingsPanel.jsx'
+import SegmentedToggle from '../components/SegmentedToggle.jsx'
 
 function statusLabel(key) {
   return STATUS_COLUMNS.find((s) => s.key === key)?.label ?? key
@@ -58,36 +59,40 @@ export default function BugListPage({
   return (
     <main className="list-page">
       <div className="list-header">
-        <div className="eyebrow">Bug Reports</div>
         <div className="list-header-row">
           <h1>プロジェクト: {projectName}</h1>
           <div className="list-header-actions">
-            <button className="help-link" onClick={() => setShowNewReport((v) => !v)}>
-              {showNewReport ? '新規報告を閉じる' : '+ 新規報告'}
-            </button>
-            <button className="help-link" onClick={() => setShowMembers((v) => !v)}>
-              {showMembers ? 'メンバーを閉じる' : 'メンバー'}
+            <button
+              type="button"
+              className={`panel-toggle ${showNewReport ? 'active' : ''}`}
+              onClick={() => setShowNewReport((v) => !v)}
+            >
+              + 新規報告
             </button>
             <button
-              className={`help-link ${storageBlocked ? 'help-link-warning' : ''}`}
+              type="button"
+              className={`panel-toggle ${showMembers ? 'active' : ''}`}
+              onClick={() => setShowMembers((v) => !v)}
+            >
+              メンバー
+            </button>
+            <button
+              type="button"
+              className={`panel-toggle ${showStorage ? 'active' : ''} ${
+                storageBlocked ? 'warning' : ''
+              }`}
               onClick={() => setShowStorage((v) => !v)}
             >
-              {showStorage ? 'ストレージ設定を閉じる' : storageBlocked ? '⚠ ストレージ設定' : 'ストレージ設定'}
+              ストレージ設定
             </button>
-            <div className="view-toggle">
-              <button
-                className={view === 'table' ? 'active' : ''}
-                onClick={() => setView('table')}
-              >
-                テーブル
-              </button>
-              <button
-                className={view === 'kanban' ? 'active' : ''}
-                onClick={() => setView('kanban')}
-              >
-                カンバン
-              </button>
-            </div>
+            <SegmentedToggle
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'table', label: 'テーブル' },
+                { value: 'kanban', label: 'カンバン' },
+              ]}
+            />
           </div>
         </div>
       </div>
