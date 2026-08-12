@@ -7,6 +7,9 @@ import userEvent from '@testing-library/user-event'
 let App
 beforeEach(async () => {
   vi.resetModules()
+  // BrowserRouterは実ブラウザ履歴(window.location)を見るため、resetModulesだけでは
+  // 前のテストで移動したURLが残ってしまう。テストごとにルートへ戻しておく。
+  window.history.pushState({}, '', '/')
   ;({ default: App } = await import('./App.jsx'))
 })
 
@@ -217,6 +220,38 @@ describe('App (mock client integration)', () => {
     await waitFor(() => expect(screen.queryByText('プロジェクト: Nightfall Trail')).not.toBeInTheDocument())
     await screen.findByText('新規プロジェクト') // プロジェクト一覧画面に戻っていることの確認
     expect(screen.queryByText('Nightfall Trail')).not.toBeInTheDocument()
+  })
+
+  it('reflects each screen in the URL and supports the browser back/forward buttons', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Googleでログイン' }))
+    await screen.findByText('プロジェクト')
+    expect(window.location.pathname).toBe('/projects')
+
+    await user.click(await screen.findByText('Nightfall Trail'))
+    await screen.findByText('プロジェクト: Nightfall Trail')
+    expect(window.location.pathname).toBe('/projects/1')
+
+    await user.click(await screen.findByText('崖から落ちた直後にゲームがフリーズする'))
+    await screen.findByRole('heading', { name: '崖から落ちた直後にゲームがフリーズする' })
+    expect(window.location.pathname).toMatch(/^\/projects\/1\/reports\/\d+$/)
+
+    // ブラウザの「戻る」でバグ一覧へ、もう一度「戻る」でプロジェクト一覧へ戻る
+    window.history.back()
+    await screen.findByText('プロジェクト: Nightfall Trail')
+    expect(window.location.pathname).toBe('/projects/1')
+
+    window.history.back()
+    await screen.findByText('プロジェクト')
+    await screen.findByText('Nightfall Trail')
+    expect(window.location.pathname).toBe('/projects')
+
+    // ブラウザの「進む」でバグ一覧に戻れる
+    window.history.forward()
+    await screen.findByText('プロジェクト: Nightfall Trail')
+    expect(window.location.pathname).toBe('/projects/1')
   })
 
   it('lets the user rename their display name from the header', async () => {

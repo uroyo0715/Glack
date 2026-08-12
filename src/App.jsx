@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { BrowserRouter, useLocation, useNavigate, matchPath } from 'react-router-dom'
 import ProjectsPage from './pages/ProjectsPage.jsx'
 import BugListPage from './pages/BugListPage.jsx'
 import BugDetailPage from './pages/BugDetailPage.jsx'
@@ -43,10 +44,64 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
 
+  useEffect(() => {
+    me()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setAuthChecked(true))
+  }, [])
+
+  function handleGoogleLogin() {
+    return loginWithGoogle().then(setUser)
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="app-shell">
+        <div className="state-panel">読み込み中...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage onGoogleLogin={handleGoogleLogin} />
+  }
+
+  return (
+    <BrowserRouter>
+      <AppShell user={user} setUser={setUser} />
+    </BrowserRouter>
+  )
+}
+
+// ブラウザの戻る/進むが自然に機能するよう、画面(プロジェクト一覧/バグ一覧/バグ詳細/ヘルプ)を
+// URLで表現する。selectedProjectId/selectedId/showHelpはstateではなく、常にlocation.pathnameから
+// 導出する（=URLが単一の真実源。ブラウザ履歴の移動もlocationの変化として自然に反映される）。
+const REPORT_PATH = '/projects/:projectId/reports/:reportId'
+const LIST_PATH = '/projects/:projectId'
+
+function AppShell({ user, setUser }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // ルート("/")は直接表示せず、常にプロジェクト一覧のURLへ正規化する。
+  useEffect(() => {
+    if (location.pathname === '/') navigate('/projects', { replace: true })
+  }, [location.pathname, navigate])
+
+  const reportMatch = matchPath(REPORT_PATH, location.pathname)
+  const listMatch = !reportMatch ? matchPath(LIST_PATH, location.pathname) : null
+  const selectedProjectId = reportMatch
+    ? Number(reportMatch.params.projectId)
+    : listMatch
+      ? Number(listMatch.params.projectId)
+      : null
+  const selectedId = reportMatch ? Number(reportMatch.params.reportId) : null
+  const showHelp = location.pathname === '/help'
+
   const [projects, setProjects] = useState([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [projectsError, setProjectsError] = useState(null)
-  const [selectedProjectId, setSelectedProjectId] = useState(null)
 
   const [bugs, setBugs] = useState([])
   const [bugsLoading, setBugsLoading] = useState(true)
@@ -66,13 +121,11 @@ export default function App() {
   const [reportFacets, setReportFacets] = useState({ builds: [], whos: [], assignees: [], tags: [] })
   const [facetsReloadToken, setFacetsReloadToken] = useState(0)
 
-  const [selectedId, setSelectedId] = useState(null)
   const [selectedBug, setSelectedBug] = useState(null)
   const [selectedLoading, setSelectedLoading] = useState(false)
   const [selectedError, setSelectedError] = useState(null)
 
   const [reloadToken, setReloadToken] = useState(0)
-  const [showHelp, setShowHelp] = useState(false)
 
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
@@ -91,23 +144,8 @@ export default function App() {
     setPriorityFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
   }
 
-  useEffect(() => {
-    me()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setAuthChecked(true))
-  }, [])
-
-  function handleGoogleLogin() {
-    return loginWithGoogle().then(setUser)
-  }
-
   function handleLogout() {
-    logout().then(() => {
-      setUser(null)
-      setSelectedProjectId(null)
-      setSelectedId(null)
-    })
+    logout().then(() => setUser(null))
   }
 
   function startEditingName() {
@@ -365,7 +403,7 @@ export default function App() {
   function handleDeleteReport(id) {
     return deleteReport(id).then((result) => {
       setBugs((prev) => prev.filter((b) => b.id !== id))
-      setSelectedId(null) // 削除後は一覧に戻る
+      navigate(`/projects/${selectedProjectId}`) // 削除後は一覧に戻る
       setFacetsReloadToken((t) => t + 1) // 削除したbuild/whoが選択肢から消える場合に反映
       return result
     })
@@ -419,8 +457,9 @@ export default function App() {
     })
   }
 
-  function openProject(id) {
-    setSelectedProjectId(id)
+  // プロジェクトを切り替えた(URLのprojectIdが変わった)ときだけ、絞り込み条件をリセットする。
+  // 同じプロジェクト内で一覧⇔詳細を行き来しても絞り込みは保持される。
+  useEffect(() => {
     setQuery('')
     setStatusFilter(ALL_STATUS)
     setTagFilter(NO_TAG_FILTER)
@@ -430,30 +469,11 @@ export default function App() {
     setAssigneeFilter('')
     setBugsLoadedOnce(false)
     setStorageStatus(null)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId])
 
   function backToProjects() {
-    setSelectedProjectId(null)
-    setSelectedId(null)
-  }
-
-  // 左上のブランドロゴから、どの画面にいてもプロジェクト一覧に戻れるようにする。
-  function goToProjectsFromBrand() {
-    setShowHelp(false)
-    setSelectedProjectId(null)
-    setSelectedId(null)
-  }
-
-  if (!authChecked) {
-    return (
-      <div className="app-shell">
-        <div className="state-panel">読み込み中...</div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return <LoginPage onGoogleLogin={handleGoogleLogin} />
+    navigate('/projects')
   }
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
@@ -461,17 +481,17 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button type="button" className="brand" onClick={goToProjectsFromBrand}>
+        <button type="button" className="brand" onClick={() => navigate('/projects')}>
           <div className="brand-dot" />
           <span>Glank</span>
         </button>
         <div className="topbar-right">
           {showHelp ? (
-            <button className="back-link" onClick={() => setShowHelp(false)}>
+            <button className="back-link" onClick={() => navigate(-1)}>
               ← 戻る
             </button>
           ) : selectedId != null ? (
-            <button className="back-link" onClick={() => setSelectedId(null)}>
+            <button className="back-link" onClick={() => navigate(`/projects/${selectedProjectId}`)}>
               ← 一覧に戻る
             </button>
           ) : (
@@ -521,10 +541,10 @@ export default function App() {
         ) : (
           <ProjectsPage
             projects={projects}
-            onOpen={openProject}
+            onOpen={(id) => navigate(`/projects/${id}`)}
             onCreate={handleCreateProject}
             onDelete={handleDeleteProjects}
-            onOpenHelp={() => setShowHelp(true)}
+            onOpenHelp={() => navigate('/help')}
             onUpdateProject={handleUpdateProject}
             onRemoveImage={handleRemoveProjectImage}
           />
@@ -567,7 +587,7 @@ export default function App() {
           bugs={bugs}
           bugsLoading={bugsLoading}
           bugsError={bugsError}
-          onOpen={(id) => setSelectedId(id)}
+          onOpen={(id) => navigate(`/projects/${selectedProjectId}/reports/${id}`)}
           projectId={selectedProjectId}
           projectName={selectedProject?.name ?? ''}
           onFetchMembers={fetchProjectMembers}
