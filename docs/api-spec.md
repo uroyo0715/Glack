@@ -170,7 +170,7 @@ DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由�
 ### 3.1 `GET /reports`
 一覧画面（テーブル/カンバン）用。
 
-Query params: `status`, `tag`, `platform`, `build`, `who`, `q`（タイトル/説明の部分一致）。
+Query params: `status`, `tag`, `priority`, `platform`, `build`, `who`, `q`（タイトル/説明の部分一致）。
 `tag`は完全一致ではなく「そのバグの`tags`配列にこの値が含まれるか」で絞り込む。
 
 `build`・`who`は完全一致。フロントのフィルタUIはテキスト検索ではなく、
@@ -184,7 +184,9 @@ type BugListItem = Omit<Bug, 'inputs' | 'videoUrl'>
 ```
 
 ### 3.1.5 `GET /reports/facets`
-一覧画面の「ビルド」「報告者」絞り込みプルダウンの選択肢を作るための補助エンドポイント。
+一覧画面の「ビルド」「報告者」「種類」絞り込みの選択肢を作るための補助エンドポイント。
+`tags`は「選択肢の管理」で追加した独自項目や自由記述で使われた種類も含むため、絞り込みチップに
+新しく付けた種類がすぐ反映される（3.0.7で非表示にしたプリセットはフロント側で除く）。
 
 Query params: `projectId`（必須）
 
@@ -193,6 +195,7 @@ Response:
 interface ReportFacets {
   builds: string[] // そのプロジェクトで実際に使われているbuild値（重複なし・昇順）
   whos: string[]    // 同様にwho値
+  tags: string[]    // 同様に実際に使われているtags配列の要素（重複なし・昇順）
 }
 ```
 

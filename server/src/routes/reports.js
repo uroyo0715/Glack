@@ -55,7 +55,7 @@ router.get(
   '/reports',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { projectId, status, tag, platform, build, who, q } = req.query
+    const { projectId, status, tag, priority, platform, build, who, q } = req.query
     if (!projectId) {
       return res.status(400).json({ error: 'projectId is required' })
     }
@@ -64,7 +64,18 @@ router.get(
     }
     const resolved = await requireProjectDbClient(res, Number(projectId))
     if (!resolved) return
-    res.json(await listBugs(resolved.client, { projectId: Number(projectId), status, tag, platform, build, who, q }))
+    res.json(
+      await listBugs(resolved.client, {
+        projectId: Number(projectId),
+        status,
+        tag,
+        priority,
+        platform,
+        build,
+        who,
+        q,
+      })
+    )
   })
 )
 

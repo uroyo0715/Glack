@@ -62,6 +62,24 @@ test('GET /reports 404s for a project the user is not a member of', async () => 
   assert.equal(res.status, 404)
 })
 
+test('GET /reports filters by priority', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const priorityProject = await createManagedProject({ name: '優先度フィルタ用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+
+  const high = await (await postReportForm({ projectId: priorityProject.id, priority: 'high' })).json()
+  const low = await (await postReportForm({ projectId: priorityProject.id, priority: 'low' })).json()
+  uploadedFiles.push(high.videoUrl, low.videoUrl)
+
+  const res = await fetch(`${getBaseUrl()}/reports?projectId=${priorityProject.id}&priority=high`, {
+    headers: { Cookie: cookie },
+  })
+  assert.equal(res.status, 200)
+  const results = await res.json()
+  assert.ok(results.every((b) => b.priority === 'high'))
+  assert.ok(results.some((b) => b.id === high.id))
+  assert.ok(!results.some((b) => b.id === low.id))
+})
+
 test('POST /reports creates a bug with valid data (no API key configured)', async () => {
   delete process.env.GLANK_API_KEY
   const res = await postReportForm()
@@ -234,11 +252,11 @@ test('PATCH /reports/:id rejects empty text fields and unknown priority, but acc
   assert.equal(badPriority.status, 400)
 })
 
-test('GET /reports/facets returns distinct build/who values used in the project', async () => {
+test('GET /reports/facets returns distinct build/who/tag values used in the project', async () => {
   const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const facetsProject = await createManagedProject({ name: 'ファセットテスト用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
 
-  const first = await (await postReportForm({ projectId: facetsProject.id })).json()
+  const first = await (await postReportForm({ projectId: facetsProject.id, tags: ['crash', 'サウンド不具合'] })).json()
   uploadedFiles.push(first.videoUrl)
   const patchRes = await fetch(`${getBaseUrl()}/reports/${first.id}`, {
     method: 'PATCH',
@@ -252,7 +270,7 @@ test('GET /reports/facets returns distinct build/who values used in the project'
   })
   assert.equal(res.status, 200)
   const facets = await res.json()
-  assert.deepEqual(facets, { builds: ['1.2.0'], whos: ['alice'] })
+  assert.deepEqual(facets, { builds: ['1.2.0'], whos: ['alice'], tags: ['crash', 'サウンド不具合'] })
 })
 
 test('GET /reports/facets requires auth and membership', async () => {

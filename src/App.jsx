@@ -28,10 +28,11 @@ import {
   me,
   updateDisplayName,
 } from './api/index.js'
-import { STATUS_COLUMNS, TAG_OPTIONS } from './data/mockBugs.js'
+import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS } from './data/mockBugs.js'
 
 const ALL_STATUS = STATUS_COLUMNS.map((s) => s.key)
 const ALL_TAGS = TAG_OPTIONS.map((t) => t.key)
+const ALL_PRIORITIES = PRIORITY_OPTIONS.map((p) => p.key)
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -53,9 +54,10 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [tagFilter, setTagFilter] = useState(ALL_TAGS)
+  const [priorityFilter, setPriorityFilter] = useState(ALL_PRIORITIES)
   const [buildFilter, setBuildFilter] = useState('')
   const [whoFilter, setWhoFilter] = useState('')
-  const [reportFacets, setReportFacets] = useState({ builds: [], whos: [] })
+  const [reportFacets, setReportFacets] = useState({ builds: [], whos: [], tags: [] })
   const [facetsReloadToken, setFacetsReloadToken] = useState(0)
 
   const [selectedId, setSelectedId] = useState(null)
@@ -78,6 +80,9 @@ export default function App() {
   }
   function toggleTag(key) {
     setTagFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+  function togglePriority(key) {
+    setPriorityFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
   }
 
   useEffect(() => {
@@ -194,10 +199,11 @@ export default function App() {
     setBugsError(null)
 
     // サーバーのクエリパラメータは単一値のみ対応のため、絞り込みが単一選択の場合
-    // だけ status/tag をサーバーに渡す。複数選択時は全件取得してクライアント側で絞る。
+    // だけ status/tag/priority をサーバーに渡す。複数選択時は全件取得してクライアント側で絞る。
     const filters = { projectId: selectedProjectId, q: query.trim() || undefined }
     if (statusFilter.length === 1) filters.status = statusFilter[0]
     if (tagFilter.length === 1) filters.tag = tagFilter[0]
+    if (priorityFilter.length === 1) filters.priority = priorityFilter[0]
     if (buildFilter) filters.build = buildFilter
     if (whoFilter) filters.who = whoFilter
 
@@ -205,7 +211,10 @@ export default function App() {
       .then((result) => {
         if (cancelled) return
         const narrowed = result.filter(
-          (b) => statusFilter.includes(b.status) && b.tags.some((t) => tagFilter.includes(t))
+          (b) =>
+            statusFilter.includes(b.status) &&
+            b.tags.some((t) => tagFilter.includes(t)) &&
+            priorityFilter.includes(b.priority)
         )
         setBugs(narrowed)
       })
@@ -230,6 +239,7 @@ export default function App() {
     query,
     statusFilter,
     tagFilter,
+    priorityFilter,
     buildFilter,
     whoFilter,
     reloadToken,
@@ -245,7 +255,7 @@ export default function App() {
         if (!cancelled) setReportFacets(result)
       })
       .catch(() => {
-        if (!cancelled) setReportFacets({ builds: [], whos: [] })
+        if (!cancelled) setReportFacets({ builds: [], whos: [], tags: [] })
       })
     return () => {
       cancelled = true
@@ -364,6 +374,7 @@ export default function App() {
     setQuery('')
     setStatusFilter(ALL_STATUS)
     setTagFilter(ALL_TAGS)
+    setPriorityFilter(ALL_PRIORITIES)
     setBuildFilter('')
     setWhoFilter('')
     setBugsLoadedOnce(false)
@@ -517,6 +528,8 @@ export default function App() {
           toggleStatus={toggleStatus}
           tagFilter={tagFilter}
           toggleTag={toggleTag}
+          priorityFilter={priorityFilter}
+          togglePriority={togglePriority}
           buildFilter={buildFilter}
           setBuildFilter={setBuildFilter}
           whoFilter={whoFilter}

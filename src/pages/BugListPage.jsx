@@ -41,6 +41,8 @@ export default function BugListPage({
   toggleStatus,
   tagFilter,
   toggleTag,
+  priorityFilter,
+  togglePriority,
   buildFilter,
   setBuildFilter,
   whoFilter,
@@ -170,11 +172,15 @@ export default function BugListPage({
             toggleStatus={toggleStatus}
             tagFilter={tagFilter}
             toggleTag={toggleTag}
+            priorityFilter={priorityFilter}
+            togglePriority={togglePriority}
             buildFilter={buildFilter}
             setBuildFilter={setBuildFilter}
             whoFilter={whoFilter}
             setWhoFilter={setWhoFilter}
             reportFacets={reportFacets}
+            hiddenFieldOptions={hiddenFieldOptions}
+            customFieldOptions={customFieldOptions}
             resultCount={filtered.length}
           />
 

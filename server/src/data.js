@@ -70,7 +70,7 @@ async function rowToFullBug(client, row) {
 // @libsql/client を受け取る（managedなら共有DB、self_hostedならチーム自前のDB。
 // server/src/projectDataAccess.js の resolveProjectDbClient() で解決する）。
 
-export async function listBugs(client, { projectId, status, tag, platform, build, who, q } = {}) {
+export async function listBugs(client, { projectId, status, tag, priority, platform, build, who, q } = {}) {
   let sql = 'SELECT * FROM bugs WHERE 1=1'
   const args = []
   if (projectId) {
@@ -84,6 +84,10 @@ export async function listBugs(client, { projectId, status, tag, platform, build
   if (tag) {
     sql += ' AND EXISTS (SELECT 1 FROM json_each(bugs.tags) WHERE json_each.value = ?)'
     args.push(tag)
+  }
+  if (priority) {
+    sql += ' AND priority = ?'
+    args.push(priority)
   }
   if (platform) {
     sql += ' AND platform = ?'
@@ -106,9 +110,11 @@ export async function listBugs(client, { projectId, status, tag, platform, build
   return rows.map(rowToListItem)
 }
 
-/** カンバン/テーブルの絞り込みUI用に、プロジェクト内で実際に使われているビルド・報告者の一覧を返す */
+/** カンバン/テーブルの絞り込みUI用に、プロジェクト内で実際に使われているビルド・報告者・種類の一覧を返す。
+ * tagsは「選択肢の管理」で隠していないプリセットに加え、実際の報告で使われた自由記述の種類も
+ * ここに出てくるため、絞り込みチップに新しく付けた種類がすぐ反映される。 */
 export async function listReportFacets(client, projectId) {
-  const [buildsResult, whosResult] = await Promise.all([
+  const [buildsResult, whosResult, tagsResult] = await Promise.all([
     client.execute({
       sql: "SELECT DISTINCT build FROM bugs WHERE projectId = ? AND build != '' ORDER BY build",
       args: [projectId],
@@ -117,10 +123,16 @@ export async function listReportFacets(client, projectId) {
       sql: "SELECT DISTINCT who FROM bugs WHERE projectId = ? AND who != '' ORDER BY who",
       args: [projectId],
     }),
+    client.execute({
+      sql: `SELECT DISTINCT je.value AS tag FROM bugs, json_each(bugs.tags) je
+            WHERE bugs.projectId = ? ORDER BY je.value`,
+      args: [projectId],
+    }),
   ])
   return {
     builds: buildsResult.rows.map((r) => r.build),
     whos: whosResult.rows.map((r) => r.who),
+    tags: tagsResult.rows.map((r) => r.tag),
   }
 }
 

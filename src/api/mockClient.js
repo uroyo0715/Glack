@@ -262,6 +262,7 @@ export async function fetchReports(filters = {}) {
   if (filters.projectId) result = result.filter((b) => b.projectId === Number(filters.projectId))
   if (filters.status) result = result.filter((b) => b.status === filters.status)
   if (filters.tag) result = result.filter((b) => b.tags.includes(filters.tag))
+  if (filters.priority) result = result.filter((b) => b.priority === filters.priority)
   if (filters.platform) result = result.filter((b) => b.platform === filters.platform)
   if (filters.build) result = result.filter((b) => b.build === filters.build)
   if (filters.who) result = result.filter((b) => b.who === filters.who)
@@ -274,8 +275,8 @@ export async function fetchReports(filters = {}) {
   return result.map(toListItem)
 }
 
-/** 一覧のビルド/報告者プルダウン用に、プロジェクト内で実際に使われている値を返す。
- * @returns {Promise<{builds: string[], whos: string[]}>} */
+/** 一覧のビルド/報告者/種類プルダウン用に、プロジェクト内で実際に使われている値を返す。
+ * @returns {Promise<{builds: string[], whos: string[], tags: string[]}>} */
 export async function fetchReportFacets(projectId) {
   await delay(80)
   requireLogin()
@@ -283,7 +284,8 @@ export async function fetchReportFacets(projectId) {
   const projectBugs = bugs.filter((b) => b.projectId === Number(projectId))
   const builds = [...new Set(projectBugs.map((b) => b.build).filter(Boolean))].sort()
   const whos = [...new Set(projectBugs.map((b) => b.who).filter(Boolean))].sort()
-  return { builds, whos }
+  const tags = [...new Set(projectBugs.flatMap((b) => b.tags))].sort()
+  return { builds, whos, tags }
 }
 
 /** @returns {Promise<import('./types.js').Bug>} */
