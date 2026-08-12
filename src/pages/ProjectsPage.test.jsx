@@ -15,7 +15,7 @@ function renderPage(overrides = {}) {
     onCreate: vi.fn(),
     onDelete: vi.fn().mockResolvedValue({ deletedProjectIds: [] }),
     onOpenHelp: vi.fn(),
-    onUpdateImage: vi.fn().mockResolvedValue({ id: 1, name: 'Nightfall Trail', imageUrl: 'blob:new' }),
+    onUpdateProject: vi.fn().mockResolvedValue({ id: 1, name: 'Nightfall Trail', imageUrl: 'blob:new' }),
     onRemoveImage: vi.fn().mockResolvedValue({ id: 2, name: 'Second Game', imageUrl: null }),
     ...overrides,
   }
@@ -78,32 +78,56 @@ describe('ProjectsPage', () => {
     expect(props.onOpenHelp).toHaveBeenCalledTimes(1)
   })
 
-  describe('project image', () => {
-    it('lets the user change a project image without opening the project', async () => {
+  describe('project edit', () => {
+    it('opens the edit form via the icon button without opening the project, and submits the new name + image', async () => {
       const user = userEvent.setup()
       const props = renderPage()
       const card = screen.getByText('Nightfall Trail').closest('.project-card')
 
+      await user.click(within(card).getByRole('button', { name: 'プロジェクトを編集' }))
+      expect(props.onOpen).not.toHaveBeenCalled()
+
+      const form = screen.getByPlaceholderText('プロジェクト名').closest('form')
+      const nameInput = within(form).getByPlaceholderText('プロジェクト名')
+      await user.clear(nameInput)
+      await user.type(nameInput, 'リネーム後')
+
       const file = new File(['fake'], 'photo.png', { type: 'image/png' })
-      const input = card.querySelector('input[type="file"]')
+      const input = form.querySelector('input[type="file"]')
       await user.upload(input, file)
 
-      expect(props.onUpdateImage).toHaveBeenCalledWith(1, file)
-      expect(props.onOpen).not.toHaveBeenCalled()
+      await user.click(within(form).getByRole('button', { name: '保存' }))
+
+      expect(props.onUpdateProject).toHaveBeenCalledWith(1, { name: 'リネーム後', imageFile: file })
     })
 
-    it('only shows the remove button for a project that already has an image, and it does not open the project', async () => {
+    it('only shows the "画像を削除" action once a project has an image, and it calls onRemoveImage without closing the project', async () => {
       const user = userEvent.setup()
       const props = renderPage()
 
       const cardWithoutImage = screen.getByText('Nightfall Trail').closest('.project-card')
-      expect(within(cardWithoutImage).queryByTitle('画像を外す')).not.toBeInTheDocument()
+      await user.click(within(cardWithoutImage).getByRole('button', { name: 'プロジェクトを編集' }))
+      expect(screen.queryByRole('button', { name: '画像を削除' })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '取消' }))
 
       const cardWithImage = screen.getByText('Second Game').closest('.project-card')
-      await user.click(within(cardWithImage).getByTitle('画像を外す'))
+      await user.click(within(cardWithImage).getByRole('button', { name: 'プロジェクトを編集' }))
+      await user.click(screen.getByRole('button', { name: '画像を削除' }))
 
       expect(props.onRemoveImage).toHaveBeenCalledWith(2)
       expect(props.onOpen).not.toHaveBeenCalled()
+    })
+
+    it('cancel closes the edit form without saving', async () => {
+      const user = userEvent.setup()
+      const props = renderPage()
+      const card = screen.getByText('Nightfall Trail').closest('.project-card')
+
+      await user.click(within(card).getByRole('button', { name: 'プロジェクトを編集' }))
+      await user.click(screen.getByRole('button', { name: '取消' }))
+
+      expect(screen.queryByPlaceholderText('プロジェクト名')).not.toBeInTheDocument()
+      expect(props.onUpdateProject).not.toHaveBeenCalled()
     })
   })
 

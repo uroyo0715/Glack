@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useState } from 'react'
 
 export default function ProjectsPage({
   projects,
@@ -6,7 +6,7 @@ export default function ProjectsPage({
   onCreate,
   onDelete,
   onOpenHelp,
-  onUpdateImage,
+  onUpdateProject,
   onRemoveImage,
 }) {
   const [creating, setCreating] = useState(false)
@@ -22,9 +22,13 @@ export default function ProjectsPage({
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
 
-  const [updatingImageId, setUpdatingImageId] = useState(null)
-  const [imageErrorById, setImageErrorById] = useState({})
-  const imageInputRefs = useRef({}) // projectId -> <input type="file">
+  // カードの「編集」（名前・サムネイル画像をまとめて変更する）。一度に1件だけ編集できる。
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editImageFile, setEditImageFile] = useState(null)
+  const [editImagePreview, setEditImagePreview] = useState(null)
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState(null)
 
   function handleImageChange(e) {
     const file = e.target.files?.[0] ?? null
@@ -94,33 +98,51 @@ export default function ProjectsPage({
       .finally(() => setDeleting(false))
   }
 
-  function handleImageEditClick(e, projectId) {
+  function startEditing(e, p) {
     e.stopPropagation()
-    imageInputRefs.current[projectId]?.click()
+    setEditingId(p.id)
+    setEditName(p.name)
+    setEditImageFile(null)
+    setEditImagePreview(p.imageUrl)
+    setEditError(null)
   }
 
-  function handleImageFileChange(e, projectId) {
+  function cancelEditing(e) {
+    e?.stopPropagation()
+    setEditingId(null)
+  }
+
+  function handleEditImageChange(e) {
     const file = e.target.files?.[0] ?? null
-    e.target.value = '' // 同じファイルを続けて選んでもchangeが発火するように
     if (!file) return
-    setUpdatingImageId(projectId)
-    setImageErrorById((prev) => ({ ...prev, [projectId]: null }))
-    onUpdateImage(projectId, file)
-      .catch((err) => {
-        setImageErrorById((prev) => ({ ...prev, [projectId]: err.message ?? String(err) }))
-      })
-      .finally(() => setUpdatingImageId(null))
+    setEditImageFile(file)
+    setEditImagePreview(URL.createObjectURL(file))
   }
 
-  function handleImageRemoveClick(e, projectId) {
+  function handleEditImageRemove(e) {
     e.stopPropagation()
-    setUpdatingImageId(projectId)
-    setImageErrorById((prev) => ({ ...prev, [projectId]: null }))
-    onRemoveImage(projectId)
-      .catch((err) => {
-        setImageErrorById((prev) => ({ ...prev, [projectId]: err.message ?? String(err) }))
+    if (!editingId) return
+    setEditSubmitting(true)
+    setEditError(null)
+    onRemoveImage(editingId)
+      .then(() => {
+        setEditImageFile(null)
+        setEditImagePreview(null)
       })
-      .finally(() => setUpdatingImageId(null))
+      .catch((err) => setEditError(err.message ?? String(err)))
+      .finally(() => setEditSubmitting(false))
+  }
+
+  function handleEditSubmit(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!editName.trim()) return
+    setEditSubmitting(true)
+    setEditError(null)
+    onUpdateProject(editingId, { name: editName.trim(), imageFile: editImageFile })
+      .then(() => setEditingId(null))
+      .catch((err) => setEditError(err.message ?? String(err)))
+      .finally(() => setEditSubmitting(false))
   }
 
   return (
@@ -173,64 +195,86 @@ export default function ProjectsPage({
       )}
 
       <div className="project-grid">
-        {projects.map((p) => (
-          <div
-            className={`project-card ${selecting ? 'selectable' : ''} ${
-              selectedIds.has(p.id) ? 'selected' : ''
-            }`}
-            key={p.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => handleCardClick(p)}
-            onKeyDown={(e) => handleCardKeyDown(e, p)}
-          >
-            {selecting && (
-              <div className={`project-card-checkbox ${selectedIds.has(p.id) ? 'checked' : ''}`} />
-            )}
-            <div
-              className="project-card-image"
-              style={p.imageUrl ? { backgroundImage: `url(${p.imageUrl})` } : undefined}
+        {projects.map((p) =>
+          editingId === p.id ? (
+            <form
+              className="project-card project-card-edit-form"
+              key={p.id}
+              onSubmit={handleEditSubmit}
+              onClick={(e) => e.stopPropagation()}
             >
-              {!p.imageUrl && <span className="project-card-placeholder">No Image</span>}
-              {!selecting && (
-                <div className="project-card-image-actions">
-                  <button
-                    type="button"
-                    className="project-card-image-edit"
-                    onClick={(e) => handleImageEditClick(e, p.id)}
-                    disabled={updatingImageId === p.id}
-                  >
-                    {updatingImageId === p.id ? '更新中...' : '画像を変更'}
-                  </button>
-                  {p.imageUrl && (
-                    <button
-                      type="button"
-                      className="project-card-image-remove"
-                      onClick={(e) => handleImageRemoveClick(e, p.id)}
-                      disabled={updatingImageId === p.id}
-                      title="画像を外す"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+              <label className="project-image-picker">
+                {editImagePreview ? (
+                  <img src={editImagePreview} alt="" className="project-image-preview" />
+                ) : (
+                  <span className="project-card-placeholder">画像を選択</span>
+                )}
+                <input type="file" accept="image/*" onChange={handleEditImageChange} hidden />
+              </label>
+              {editImagePreview && (
+                <button
+                  type="button"
+                  className="project-image-remove-link"
+                  onClick={handleEditImageRemove}
+                  disabled={editSubmitting}
+                >
+                  画像を削除
+                </button>
               )}
               <input
-                type="file"
-                accept="image/*"
-                hidden
-                ref={(el) => {
-                  imageInputRefs.current[p.id] = el
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => handleImageFileChange(e, p.id)}
+                className="project-name-input"
+                type="text"
+                placeholder="プロジェクト名"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                autoFocus
               />
+              {editError && <div className="project-form-error">{editError}</div>}
+              <div className="project-form-actions">
+                <button type="submit" disabled={editSubmitting || !editName.trim()}>
+                  {editSubmitting ? '保存中...' : '保存'}
+                </button>
+                <button type="button" onClick={cancelEditing} disabled={editSubmitting}>
+                  取消
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div
+              className={`project-card ${selecting ? 'selectable' : ''} ${
+                selectedIds.has(p.id) ? 'selected' : ''
+              }`}
+              key={p.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => handleCardClick(p)}
+              onKeyDown={(e) => handleCardKeyDown(e, p)}
+            >
+              {selecting && (
+                <div className={`project-card-checkbox ${selectedIds.has(p.id) ? 'checked' : ''}`} />
+              )}
+              <div
+                className="project-card-image"
+                style={p.imageUrl ? { backgroundImage: `url(${p.imageUrl})` } : undefined}
+              >
+                {!p.imageUrl && <span className="project-card-placeholder">No Image</span>}
+              </div>
+              <div className="project-card-name">{p.name}</div>
+              <div className="project-card-id mono">ID: {p.id}</div>
+              {!selecting && (
+                <button
+                  type="button"
+                  className="project-card-edit-button"
+                  onClick={(e) => startEditing(e, p)}
+                  aria-label="プロジェクトを編集"
+                  title="編集"
+                >
+                  ✎
+                </button>
+              )}
             </div>
-            <div className="project-card-name">{p.name}</div>
-            <div className="project-card-id mono">ID: {p.id}</div>
-            {imageErrorById[p.id] && <div className="project-form-error">{imageErrorById[p.id]}</div>}
-          </div>
-        ))}
+          )
+        )}
 
         {!selecting &&
           (creating ? (

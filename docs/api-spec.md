@@ -117,6 +117,11 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
   そのプロジェクトに紐づくバグ報告数、`hiddenFieldOptions`は3.0.7、`customFieldOptions`は3.0.8参照）。
 - `POST /projects` — `multipart/form-data`。`name`（必須）と`image`（任意、ティザー画像）を受け取り、
   作成したプロジェクトを`201`で返す。作成者は自動的にそのプロジェクトのメンバーになる。
+- `PATCH /projects/:id` — `multipart/form-data`。`name`・`image`はどちらも任意で、渡した方だけ
+  更新する部分更新（プロジェクト一覧カードの「編集」から使う）。`name`を渡して空文字の場合は
+  `400`。`image`を渡して差し替える場合、古い画像ファイルは削除する。ストレージ未設定
+  （self_hostedでR2未設定）の間は`409 { error, code: 'r2_not_configured' }`。更新後の
+  プロジェクトを返す。非メンバーは`404`。
 - `PATCH /projects/:id/image` — `multipart/form-data`。`image`（必須）で作成後のティザー画像を
   差し替える。古い画像ファイルは削除する。ストレージ未設定（self_hostedでR2未設定）の間は
   `409 { error, code: 'r2_not_configured' }`。更新後のプロジェクトを返す。非メンバーは`404`。

@@ -484,6 +484,64 @@ test('POST/DELETE /projects/:id/custom-options adds and removes a project-specif
   assert.deepEqual(await removed.json(), { tag: [], platform: ['Steam Deck'] })
 })
 
+test('PATCH /projects/:id updates the name and/or image together, and rejects an empty name', async () => {
+  const owner = await createAuthCookie()
+  const project = await createManagedProject({
+    name: '編集前の名前',
+    imageUrl: null,
+    creatorEmail: owner.user.email,
+  })
+
+  const nameOnlyForm = new FormData()
+  nameOnlyForm.set('name', '編集後の名前')
+  const nameOnlyRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: nameOnlyForm,
+  })
+  assert.equal(nameOnlyRes.status, 200)
+  const nameOnlyUpdated = await nameOnlyRes.json()
+  assert.equal(nameOnlyUpdated.name, '編集後の名前')
+  assert.equal(nameOnlyUpdated.imageUrl, null)
+
+  const bothForm = new FormData()
+  bothForm.set('name', 'さらに編集後')
+  bothForm.set('image', new Blob([Buffer.from('fake image')], { type: 'image/png' }), 'photo.png')
+  const bothRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: bothForm,
+  })
+  assert.equal(bothRes.status, 200)
+  const bothUpdated = await bothRes.json()
+  assert.equal(bothUpdated.name, 'さらに編集後')
+  assert.ok(bothUpdated.imageUrl)
+
+  const emptyNameForm = new FormData()
+  emptyNameForm.set('name', '   ')
+  const emptyNameRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: emptyNameForm,
+  })
+  assert.equal(emptyNameRes.status, 400)
+})
+
+test('PATCH /projects/:id requires membership', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, '権限テスト用')
+  const stranger = await createAuthCookie()
+
+  const form = new FormData()
+  form.set('name', '勝手に変更')
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: stranger.cookie },
+    body: form,
+  })
+  assert.equal(res.status, 404)
+})
+
 test('PATCH /projects/:id/image sets/replaces the project image, and DELETE clears it', async () => {
   const owner = await createAuthCookie()
   const project = await createManagedProject({

@@ -133,6 +133,26 @@ function requireImageStorageReady(projectId) {
   }
 }
 
+/**
+ * 作成後に名前・ティザー画像をまとめて編集する。どちらも省略可（渡した方だけ更新）。
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null}>}
+ */
+export async function updateProject(projectId, { name, imageFile } = {}) {
+  await delay(150)
+  requireLogin()
+  if (name != null && !name.trim()) throw new Error('name cannot be empty')
+  if (imageFile) requireImageStorageReady(projectId)
+  const id = Number(projectId)
+  projects = projects.map((p) => {
+    if (p.id !== id) return p
+    const next = { ...p }
+    if (name != null) next.name = name.trim()
+    if (imageFile) next.imageUrl = URL.createObjectURL(imageFile)
+    return next
+  })
+  return projects.find((p) => p.id === id)
+}
+
 /** 作成後にティザー画像を差し替える。
  * @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
 export async function updateProjectImage(projectId, imageFile) {

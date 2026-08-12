@@ -8,6 +8,7 @@ const impl = import.meta.env.VITE_API_BASE_URL ? realClient : mockClient
 export const {
   fetchProjects,
   createProject,
+  updateProject,
   updateProjectImage,
   removeProjectImage,
   deleteProjects,

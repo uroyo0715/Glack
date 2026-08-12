@@ -584,6 +584,15 @@ export async function updateProjectImage(id, imageUrl) {
   return getProjectById(id)
 }
 
+/** プロジェクト名を作成後に変更する。 */
+export async function updateProjectName(id, name) {
+  await db.execute({
+    sql: 'UPDATE projects SET name = ? WHERE id = ?',
+    args: [name, id],
+  })
+  return getProjectById(id)
+}
+
 /**
  * 指定したプロジェクトと、その配下のプロジェクトメンバー行を削除する。
  * バグ報告自体の削除は呼び出し側で resolveProjectDbClient() + deleteAllBugsForProject() を使う

@@ -24,6 +24,24 @@ export async function createProject(name, imageFile) {
   return res.json()
 }
 
+/**
+ * 作成後に名前・ティザー画像をまとめて編集する。どちらも省略可（渡した方だけ更新）。
+ * 画像を差し替える場合、self_hostedでR2未設定の間は409。
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null}>}
+ */
+export async function updateProject(projectId, { name, imageFile } = {}) {
+  const form = new FormData()
+  if (name != null) form.set('name', name)
+  if (imageFile) form.set('image', imageFile)
+  const res = await fetch(`${BASE_URL}/projects/${projectId}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    body: form,
+  })
+  if (!res.ok) await throwApiError(res, `updateProject failed: ${res.status}`)
+  return res.json()
+}
+
 /** 作成後にティザー画像を差し替える。self_hostedでR2未設定の間は409。
  * @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
 export async function updateProjectImage(projectId, imageFile) {

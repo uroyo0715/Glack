@@ -7,7 +7,7 @@ import HelpPage from './pages/HelpPage.jsx'
 import {
   fetchProjects,
   createProject,
-  updateProjectImage,
+  updateProject,
   removeProjectImage,
   deleteProjects,
   fetchProjectMembers,
@@ -156,8 +156,8 @@ export default function App() {
     })
   }
 
-  function handleUpdateProjectImage(projectId, imageFile) {
-    return updateProjectImage(projectId, imageFile).then((updated) => {
+  function handleUpdateProject(projectId, fields) {
+    return updateProject(projectId, fields).then((updated) => {
       setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated } : p)))
       return updated
     })
@@ -496,7 +496,7 @@ export default function App() {
             onCreate={handleCreateProject}
             onDelete={handleDeleteProjects}
             onOpenHelp={() => setShowHelp(true)}
-            onUpdateImage={handleUpdateProjectImage}
+            onUpdateProject={handleUpdateProject}
             onRemoveImage={handleRemoveProjectImage}
           />
         )

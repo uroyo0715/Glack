@@ -3,6 +3,7 @@ import multer from 'multer'
 import {
   listProjectsForUser,
   createProject,
+  getProjectById,
   deleteProjects,
   deleteAllBugsForProject,
   isProjectMember,
@@ -16,6 +17,7 @@ import {
   addProjectCustomOption,
   removeProjectCustomOption,
   updateProjectImage,
+  updateProjectName,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -64,6 +66,44 @@ router.post(
 
     const project = await createProject({ name: name.trim(), imageUrl, creatorEmail: req.user.email })
     res.status(201).json(project)
+  })
+)
+
+// 作成後に名前・ティザー画像をまとめて編集する（プロジェクト一覧カードの「編集」から使う）。
+// どちらも省略可（渡した方だけ更新する部分更新）。画像を差し替える場合のみ、
+// self_hostedでR2が未設定だと保存先が無いため409になる。
+router.patch(
+  '/projects/:id',
+  requireAuth,
+  upload.single('image'),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const { name } = req.body ?? {}
+    if (name != null && !name.trim()) {
+      return res.status(400).json({ error: 'name cannot be empty' })
+    }
+
+    const project = await getProjectRaw(projectId)
+
+    if (req.file) {
+      const storageTarget = resolveProjectStorageConfig(project)
+      if (!storageTarget.ready) {
+        return res.status(409).json({ error: 'storage not configured for this project', code: storageTarget.reason })
+      }
+      const oldImageUrl = project.imageUrl
+      const { imageUrl } = await saveImage(storageTarget, req.file.buffer, req.file.originalname)
+      await updateProjectImage(projectId, imageUrl)
+      if (oldImageUrl) await deleteFile(storageTarget, oldImageUrl)
+    }
+
+    if (name != null && name.trim()) {
+      await updateProjectName(projectId, name.trim())
+    }
+
+    res.json(await getProjectById(projectId))
   })
 )
 
