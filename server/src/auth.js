@@ -11,6 +11,12 @@ export const GOOGLE_REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8787/api/v1/auth/google/callback'
 export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173/'
 
+// フロントエンドとバックエンドが別ドメインになる本番(HTTPS)では、Cookieを
+// SameSite=None; Secure にしないとクロスサイトのfetchで送られずログインが維持できない。
+// ローカル開発(HTTP)では引き続きSameSite=Laxのまま(Secureはhttpだと保存自体されないため)。
+const CROSS_SITE_COOKIES = FRONTEND_URL.startsWith('https://')
+const SESSION_COOKIE_ATTRS = CROSS_SITE_COOKIES ? 'SameSite=None; Secure' : 'SameSite=Lax'
+
 export const googleClient = new OAuth2Client(
   GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -49,15 +55,14 @@ export async function getSessionUser(req) {
 }
 
 export function setSessionCookie(res, token) {
-  // ローカル開発(http)を想定し Secure は付けない。本番では Secure; SameSite=Strict 等に強化する。
   res.setHeader(
     'Set-Cookie',
-    `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 7}`
+    `${SESSION_COOKIE}=${token}; HttpOnly; ${SESSION_COOKIE_ATTRS}; Path=/; Max-Age=${60 * 60 * 24 * 7}`
   )
 }
 
 export function clearSessionCookie(res) {
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`)
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; ${SESSION_COOKIE_ATTRS}; Path=/; Max-Age=0`)
 }
 
 // OAuth CSRF対策: /auth/google でstateを短命Cookieに保存し、/auth/google/callback で照合する。
@@ -68,12 +73,15 @@ export function getOAuthState(req) {
 export function setOAuthStateCookie(res, state) {
   res.setHeader(
     'Set-Cookie',
-    `${OAUTH_STATE_COOKIE}=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`
+    `${OAUTH_STATE_COOKIE}=${state}; HttpOnly; ${SESSION_COOKIE_ATTRS}; Path=/; Max-Age=600`
   )
 }
 
 export function clearOAuthStateCookie(res) {
-  res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`)
+  res.setHeader(
+    'Set-Cookie',
+    `${OAUTH_STATE_COOKIE}=; HttpOnly; ${SESSION_COOKIE_ATTRS}; Path=/; Max-Age=0`
+  )
 }
 
 export const requireAuth = asyncHandler(async (req, res, next) => {
