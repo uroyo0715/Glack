@@ -129,8 +129,7 @@ test('deleteAllBugsForProject removes bugs/bugInputs for that project only, and 
     createBug(db, {
       projectId,
       title: 'title',
-      tag: 'crash',
-      tagLabel: 'CRASH',
+      tags: ['crash'],
       desc: 'desc',
       who: 'tester',
       build: '0.0.1',
@@ -164,8 +163,7 @@ test('createBug persists full record including inputs, and listBugs scopes by pr
   const bug = await createBug(db, {
     projectId: project.id,
     title: 'テストバグ',
-    tag: 'crash',
-    tagLabel: 'CRASH',
+    tags: ['crash'],
     desc: '説明',
     who: 'tester',
     build: '0.0.1',
@@ -204,8 +202,7 @@ test('listBugs filters by status, tag, and q', async () => {
     createBug(db, {
       projectId: project.id,
       title: 'ボスが壁を貫通する',
-      tag: 'crash',
-      tagLabel: 'CRASH',
+      tags: ['crash'],
       desc: 'ダメージ計算がおかしい',
       who: 'tester',
       build: '0.0.1',
@@ -218,11 +215,13 @@ test('listBugs filters by status, tag, and q', async () => {
       ...overrides,
     })
 
-  await make({ tag: 'crash', title: 'クラッシュ報告' })
-  await make({ tag: 'visual', title: '見た目がおかしい' })
+  await make({ tags: ['crash'], title: 'クラッシュ報告' })
+  await make({ tags: ['visual'], title: '見た目がおかしい' })
+  await make({ tags: ['crash', 'visual'], title: '複数タグ報告' })
 
   const crashOnly = await listBugs(db, { projectId: project.id, tag: 'crash' })
-  assert.ok(crashOnly.every((b) => b.tag === 'crash'))
+  assert.ok(crashOnly.every((b) => b.tags.includes('crash')))
+  assert.equal(crashOnly.length, 2)
 
   const byTitle = await listBugs(db, { projectId: project.id, q: '見た目' })
   assert.ok(byTitle.every((b) => b.title.includes('見た目')))
@@ -233,8 +232,7 @@ test('updateBugStatus updates and returns the list-item shape', async () => {
   const bug = await createBug(db, {
     projectId: project.id,
     title: 'title',
-    tag: 'crash',
-    tagLabel: 'CRASH',
+    tags: ['crash'],
     desc: 'desc',
     who: 'tester',
     build: '0.0.1',

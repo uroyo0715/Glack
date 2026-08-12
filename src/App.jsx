@@ -14,6 +14,8 @@ import {
   fetchProjectStorageStatus,
   updateProjectStorage,
   updateProjectFieldOptions,
+  addProjectCustomOption,
+  removeProjectCustomOption,
   fetchReports,
   fetchReport,
   fetchReportFacets,
@@ -203,7 +205,7 @@ export default function App() {
       .then((result) => {
         if (cancelled) return
         const narrowed = result.filter(
-          (b) => statusFilter.includes(b.status) && tagFilter.includes(b.tag)
+          (b) => statusFilter.includes(b.status) && b.tags.some((t) => tagFilter.includes(t))
         )
         setBugs(narrowed)
       })
@@ -321,6 +323,24 @@ export default function App() {
     return updateProjectFieldOptions(projectId, fieldOptions).then((result) => {
       setProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, hiddenFieldOptions: result } : p))
+      )
+      return result
+    })
+  }
+
+  function handleAddCustomOption(projectId, field, value) {
+    return addProjectCustomOption(projectId, field, value).then((result) => {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, customFieldOptions: result } : p))
+      )
+      return result
+    })
+  }
+
+  function handleRemoveCustomOption(projectId, field, value) {
+    return removeProjectCustomOption(projectId, field, value).then((result) => {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, customFieldOptions: result } : p))
       )
       return result
     })
@@ -455,6 +475,7 @@ export default function App() {
               onDeleteReport={handleDeleteReport}
               buildOptions={reportFacets.builds}
               hiddenFieldOptions={selectedProject?.hiddenFieldOptions}
+              customFieldOptions={selectedProject?.customFieldOptions}
               onFetchMembers={fetchProjectMembers}
             />
           )
@@ -487,6 +508,9 @@ export default function App() {
           onUpdateStorage={handleUpdateStorage}
           hiddenFieldOptions={selectedProject?.hiddenFieldOptions}
           onUpdateFieldOptions={(patch) => handleUpdateFieldOptions(selectedProjectId, patch)}
+          customFieldOptions={selectedProject?.customFieldOptions}
+          onAddCustomOption={(field, value) => handleAddCustomOption(selectedProjectId, field, value)}
+          onRemoveCustomOption={(field, value) => handleRemoveCustomOption(selectedProjectId, field, value)}
           query={query}
           setQuery={setQuery}
           statusFilter={statusFilter}

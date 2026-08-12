@@ -34,6 +34,9 @@ const fieldOptionsByProject = new Map(
   projects.map((p) => [p.id, { tag: [], priority: [], platform: [] }])
 )
 
+// projectId -> { tag: string[], platform: string[] }。プロジェクト独自の追加項目。
+const customFieldOptionsByProject = new Map(projects.map((p) => [p.id, { tag: [], platform: [] }]))
+
 function requireStorageReady(projectId) {
   const status = storageByProject.get(Number(projectId))
   if (!status) return
@@ -93,6 +96,7 @@ export async function fetchProjects() {
     ...p,
     bugCount: bugs.filter((b) => b.projectId === p.id).length,
     hiddenFieldOptions: fieldOptionsByProject.get(p.id) ?? { tag: [], priority: [], platform: [] },
+    customFieldOptions: customFieldOptionsByProject.get(p.id) ?? { tag: [], platform: [] },
   }))
 }
 
@@ -113,6 +117,7 @@ export async function createProject(name, imageFile) {
     r2Configured: false,
   })
   fieldOptionsByProject.set(project.id, { tag: [], priority: [], platform: [] })
+  customFieldOptionsByProject.set(project.id, { tag: [], platform: [] })
   return project
 }
 
@@ -124,6 +129,33 @@ export async function updateProjectFieldOptions(projectId, fieldOptions) {
   const current = fieldOptionsByProject.get(id) ?? { tag: [], priority: [], platform: [] }
   const next = { ...current, ...fieldOptions }
   fieldOptionsByProject.set(id, next)
+  return next
+}
+
+const CUSTOM_OPTION_FIELDS = ['tag', 'platform']
+
+/** @returns {Promise<{tag: string[], platform: string[]}>} */
+export async function addProjectCustomOption(projectId, field, value) {
+  await delay(100)
+  requireLogin()
+  if (!CUSTOM_OPTION_FIELDS.includes(field)) throw new Error(`unknown field: ${field}`)
+  const id = Number(projectId)
+  const current = customFieldOptionsByProject.get(id) ?? { tag: [], platform: [] }
+  const list = current[field]
+  const next = { ...current, [field]: list.includes(value) ? list : [...list, value] }
+  customFieldOptionsByProject.set(id, next)
+  return next
+}
+
+/** @returns {Promise<{tag: string[], platform: string[]}>} */
+export async function removeProjectCustomOption(projectId, field, value) {
+  await delay(100)
+  requireLogin()
+  if (!CUSTOM_OPTION_FIELDS.includes(field)) throw new Error(`unknown field: ${field}`)
+  const id = Number(projectId)
+  const current = customFieldOptionsByProject.get(id) ?? { tag: [], platform: [] }
+  const next = { ...current, [field]: current[field].filter((v) => v !== value) }
+  customFieldOptionsByProject.set(id, next)
   return next
 }
 
@@ -216,6 +248,7 @@ export async function deleteProjects(ids) {
     membersByProject.delete(id)
     storageByProject.delete(id)
     fieldOptionsByProject.delete(id)
+    customFieldOptionsByProject.delete(id)
   })
   return { deletedProjectIds }
 }
@@ -228,7 +261,7 @@ export async function fetchReports(filters = {}) {
   let result = bugs
   if (filters.projectId) result = result.filter((b) => b.projectId === Number(filters.projectId))
   if (filters.status) result = result.filter((b) => b.status === filters.status)
-  if (filters.tag) result = result.filter((b) => b.tag === filters.tag)
+  if (filters.tag) result = result.filter((b) => b.tags.includes(filters.tag))
   if (filters.platform) result = result.filter((b) => b.platform === filters.platform)
   if (filters.build) result = result.filter((b) => b.build === filters.build)
   if (filters.who) result = result.filter((b) => b.who === filters.who)
@@ -258,9 +291,12 @@ export async function createManualReport(projectId, fields) {
   await delay(150)
   requireLogin()
   requireStorageReady(projectId)
-  const required = ['title', 'tag', 'desc', 'who', 'build', 'platform']
+  const required = ['title', 'desc', 'who', 'build', 'platform']
   const missing = required.filter((key) => !fields[key])
   if (missing.length > 0) throw new Error(`missing fields: ${missing.join(', ')}`)
+  if (!Array.isArray(fields.tags) || fields.tags.length === 0) {
+    throw new Error('tags must be a non-empty array of strings')
+  }
   const priority = fields.priority || 'medium'
   if (!PRIORITY_KEYS.has(priority)) throw new Error(`unknown priority: ${priority}`)
 
@@ -268,8 +304,8 @@ export async function createManualReport(projectId, fields) {
     id: nextBugId++,
     projectId: Number(projectId),
     title: fields.title,
-    tag: fields.tag,
-    tagLabel: resolveTagLabel(fields.tag),
+    tags: fields.tags,
+    tagLabels: fields.tags.map(resolveTagLabel),
     status: 'todo',
     desc: fields.desc,
     who: fields.who,
@@ -302,7 +338,7 @@ export async function updateReportStatus(id, status) {
   return toListItem(bugs.find((b) => String(b.id) === String(id)))
 }
 
-const EDITABLE_TEXT_FIELDS = ['title', 'tag', 'desc', 'who', 'build', 'platform']
+const EDITABLE_TEXT_FIELDS = ['title', 'desc', 'who', 'build', 'platform']
 
 /** 報告後にタイトル・ビルドバージョン等のメタデータを直すための部分更新。渡したフィールドだけ更新される。
  * @returns {Promise<import('./types.js').BugListItem>} */
@@ -311,12 +347,15 @@ export async function updateReportFields(id, fields) {
   requireLogin()
   const emptyField = EDITABLE_TEXT_FIELDS.find((key) => fields[key] === '')
   if (emptyField) throw new Error(`${emptyField} cannot be empty`)
+  if (fields.tags != null && (!Array.isArray(fields.tags) || fields.tags.length === 0)) {
+    throw new Error('tags must be a non-empty array of strings')
+  }
   if (fields.priority != null && !PRIORITY_KEYS.has(fields.priority)) {
     throw new Error(`unknown priority: ${fields.priority}`)
   }
 
   const patch = { ...fields }
-  if (patch.tag != null) patch.tagLabel = resolveTagLabel(patch.tag)
+  if (patch.tags != null) patch.tagLabels = patch.tags.map(resolveTagLabel)
   bugs = bugs.map((b) => (String(b.id) === String(id) ? { ...b, ...patch } : b))
   return toListItem(bugs.find((b) => String(b.id) === String(id)))
 }

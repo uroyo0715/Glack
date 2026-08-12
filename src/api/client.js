@@ -121,6 +121,40 @@ export async function updateProjectFieldOptions(projectId, fieldOptions) {
   return res.json()
 }
 
+/**
+ * 種類・プラットフォームに、このプロジェクト独自のプリセット項目を追加する。
+ * @returns {Promise<{tag: string[], platform: string[]}>}
+ */
+export async function addProjectCustomOption(projectId, field, value) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/custom-options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ field, value }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `addProjectCustomOption failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/** このプロジェクトが追加した独自の種類・プラットフォーム項目を削除する。
+ * @returns {Promise<{tag: string[], platform: string[]}>} */
+export async function removeProjectCustomOption(projectId, field, value) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/custom-options`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ field, value }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `removeProjectCustomOption failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 // バックエンドが409 { error, code } で返す「このプロジェクトはまだストレージ未設定」を
 // フロント側で判別できるよう、エラーオブジェクトに code を載せて投げる共通ヘルパー。
 async function throwApiError(res, fallbackMessage) {

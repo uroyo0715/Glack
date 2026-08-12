@@ -15,8 +15,8 @@
  * @typedef {Object} BugListItem
  * @property {string|number} id
  * @property {string} title
- * @property {BugTag} tag
- * @property {string} tagLabel
+ * @property {BugTag[]} tags
+ * @property {string[]} tagLabels
  * @property {BugStatus} status
  * @property {string} desc
  * @property {string} who

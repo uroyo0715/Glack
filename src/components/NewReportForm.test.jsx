@@ -52,7 +52,7 @@ describe('NewReportForm build/who/platform combo fields', () => {
     expect(screen.queryByPlaceholderText('例: PC (Steam)')).not.toBeInTheDocument()
   })
 
-  it('lets the user enter a custom 種類 not in the preset list', async () => {
+  it('lets the user pick multiple preset 種類 tags and add a custom one', async () => {
     const user = userEvent.setup()
     const props = setup()
     await screen.findByText('アリス')
@@ -62,12 +62,14 @@ describe('NewReportForm build/who/platform combo fields', () => {
     const descInput = document.querySelector('textarea')
     await user.type(descInput, '効果音が二重に鳴る')
 
-    // 種類はデフォルトでプリセットの先頭（CRASH）が選ばれているので、直接入力に切り替える
-    const tagSelect = screen.getByDisplayValue('CRASH')
-    await user.selectOptions(tagSelect, '直接入力する')
+    // プリセットの種類は複数トグルできる
+    await user.click(screen.getByRole('button', { name: 'CRASH' }))
+    await user.click(screen.getByRole('button', { name: 'VISUAL' }))
+
+    // プリセットにない種類はテキスト入力から追加する
     const tagInput = screen.getByPlaceholderText('例: サウンド不具合')
-    await user.clear(tagInput)
     await user.type(tagInput, 'サウンド不具合')
+    await user.click(screen.getByRole('button', { name: '追加' }))
 
     await user.selectOptions(screen.getByDisplayValue('メンバーから選択'), 'アリス')
     await user.selectOptions(screen.getByDisplayValue('既存のビルドから選択'), '0.1.0')
@@ -75,7 +77,10 @@ describe('NewReportForm build/who/platform combo fields', () => {
 
     await user.click(screen.getByRole('button', { name: '作成' }))
 
-    expect(props.onCreate).toHaveBeenCalledWith(1, expect.objectContaining({ tag: 'サウンド不具合' }))
+    expect(props.onCreate).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ tags: ['crash', 'visual', 'サウンド不具合'] })
+    )
   })
 
   it('submits with a build chosen from the dropdown', async () => {
@@ -88,6 +93,7 @@ describe('NewReportForm build/who/platform combo fields', () => {
     const descInput = document.querySelector('textarea')
     await user.type(descInput, 'テスト詳細')
 
+    await user.click(screen.getByRole('button', { name: 'CRASH' }))
     await user.selectOptions(screen.getByDisplayValue('メンバーから選択'), 'アリス')
     await user.selectOptions(screen.getByDisplayValue('既存のビルドから選択'), '0.1.0')
     await user.selectOptions(screen.getByDisplayValue('選択してください'), 'Switch2')

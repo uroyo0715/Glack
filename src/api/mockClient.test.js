@@ -53,7 +53,7 @@ describe('mockClient reports', () => {
     expect(byStatus.every((b) => b.status === 'todo')).toBe(true)
 
     const byTag = await client.fetchReports({ tag: 'crash' })
-    expect(byTag.every((b) => b.tag === 'crash')).toBe(true)
+    expect(byTag.every((b) => b.tags.includes('crash'))).toBe(true)
 
     const byProject = await client.fetchReports({ projectId: 1 })
     expect(byProject.length).toBe(all.length) // 現状の全シードデータはproject 1所属

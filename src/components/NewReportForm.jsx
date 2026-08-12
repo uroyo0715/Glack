@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { TAG_OPTIONS, PRIORITY_OPTIONS, PLATFORM_OPTIONS } from '../data/mockBugs.js'
 import ComboField from './ComboField.jsx'
+import TagMultiField from './TagMultiField.jsx'
 
 const initialFields = (defaultWho) => ({
   title: '',
-  tag: TAG_OPTIONS[0].key,
+  tags: [],
   desc: '',
   who: defaultWho || '',
   build: '',
@@ -17,6 +18,7 @@ export default function NewReportForm({
   defaultWho,
   buildOptions,
   hiddenFieldOptions,
+  customFieldOptions,
   onFetchMembers,
   onCreate,
   onClose,
@@ -25,6 +27,12 @@ export default function NewReportForm({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [whoOptions, setWhoOptions] = useState([])
+
+  const tagOptions = [
+    ...TAG_OPTIONS.map((t) => ({ value: t.key, label: t.label })),
+    ...(customFieldOptions?.tag ?? []).map((v) => ({ value: v, label: v })),
+  ]
+  const platformOptions = [...PLATFORM_OPTIONS, ...(customFieldOptions?.platform ?? [])]
 
   useEffect(() => {
     let cancelled = false
@@ -48,7 +56,7 @@ export default function NewReportForm({
 
   const requiredFilled =
     fields.title.trim() &&
-    fields.tag.trim() &&
+    fields.tags.length > 0 &&
     fields.desc.trim() &&
     fields.who.trim() &&
     fields.build.trim() &&
@@ -82,17 +90,16 @@ export default function NewReportForm({
           />
         </label>
 
-        <label className="new-report-field">
-          <span>種類</span>
-          <ComboField
-            value={fields.tag}
-            onChange={(v) => setField('tag', v)}
-            options={TAG_OPTIONS.map((t) => ({ value: t.key, label: t.label }))}
+        <div className="new-report-field new-report-field-wide">
+          <span>種類（複数選択可）</span>
+          <TagMultiField
+            value={fields.tags}
+            onChange={(v) => setField('tags', v)}
+            options={tagOptions}
             hiddenValues={hiddenFieldOptions?.tag}
-            placeholder="選択してください"
             manualPlaceholder="例: サウンド不具合"
           />
-        </label>
+        </div>
 
         <label className="new-report-field">
           <span>優先度</span>
@@ -143,7 +150,7 @@ export default function NewReportForm({
           <ComboField
             value={fields.platform}
             onChange={(v) => setField('platform', v)}
-            options={PLATFORM_OPTIONS}
+            options={platformOptions}
             hiddenValues={hiddenFieldOptions?.platform}
             placeholder="選択してください"
             manualPlaceholder="例: PC (Steam)"

@@ -34,6 +34,7 @@ export default function BugDetailPage({
   onUpdateReport,
   buildOptions,
   hiddenFieldOptions,
+  customFieldOptions,
   onFetchMembers,
   onDeleteReport,
 }) {
@@ -110,7 +111,13 @@ export default function BugDetailPage({
       >
         <div className="header">
           <div className="header-top">
-            <span className={`tag detail-tag ${bug.tag}`}>{bug.tagLabel}</span>
+            <div className="detail-tag-list">
+              {bug.tags.map((t, i) => (
+                <span className={`tag detail-tag ${t}`} key={t}>
+                  {bug.tagLabels[i]}
+                </span>
+              ))}
+            </div>
             <div className="header-actions">
               <button type="button" className="edit-toggle" onClick={() => setEditing((v) => !v)}>
                 {editing ? '編集をやめる' : '編集'}
@@ -156,6 +163,7 @@ export default function BugDetailPage({
             bug={bug}
             buildOptions={buildOptions}
             hiddenFieldOptions={hiddenFieldOptions}
+            customFieldOptions={customFieldOptions}
             onFetchMembers={onFetchMembers}
             onUpdate={onUpdateReport}
             onClose={() => setEditing(false)}

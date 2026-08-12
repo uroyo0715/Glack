@@ -11,7 +11,6 @@ import {
   resolveBugProjectId,
   getProjectRaw,
   isProjectMember,
-  resolveTagLabel,
   PRIORITY_LABELS,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
@@ -103,7 +102,11 @@ router.get(
   })
 )
 
-const EDITABLE_TEXT_FIELDS = ['title', 'tag', 'desc', 'who', 'build', 'platform']
+const EDITABLE_TEXT_FIELDS = ['title', 'desc', 'who', 'build', 'platform']
+
+function isValidTags(tags) {
+  return Array.isArray(tags) && tags.length > 0 && tags.every((t) => typeof t === 'string' && t.trim())
+}
 
 router.patch(
   '/reports/:id',
@@ -121,22 +124,25 @@ router.patch(
     const existing = await getBugById(client, id)
     if (!existing) return res.status(404).json({ error: 'not found' })
 
-    const { status, title, tag, desc, who, build, platform, priority } = req.body ?? {}
+    const { status, title, tags, desc, who, build, platform, priority } = req.body ?? {}
 
     const emptyField = EDITABLE_TEXT_FIELDS.find((key) => req.body?.[key] === '')
     if (emptyField) {
       return res.status(400).json({ error: `${emptyField} cannot be empty` })
     }
+    if (tags != null && !isValidTags(tags)) {
+      return res.status(400).json({ error: 'tags must be a non-empty array of strings' })
+    }
     if (priority != null && !PRIORITY_LABELS[priority]) {
       return res.status(400).json({ error: `unknown priority: ${priority}` })
     }
 
-    const hasFieldUpdates = [title, tag, desc, who, build, platform, priority].some((v) => v != null)
+    const hasFieldUpdates = [title, tags, desc, who, build, platform, priority].some((v) => v != null)
 
     let updated
     if (status) updated = await updateBugStatus(client, id, status)
     if (hasFieldUpdates) {
-      updated = await updateBugFields(client, id, { title, tag, desc, who, build, platform, priority })
+      updated = await updateBugFields(client, id, { title, tags, desc, who, build, platform, priority })
     }
     if (!updated) {
       const { videoUrl, fps, durationFrames, inputs, ...existingListItem } = existing
@@ -161,7 +167,7 @@ router.post(
     const required = [
       'projectId',
       'title',
-      'tag',
+      'tags',
       'desc',
       'who',
       'build',
@@ -172,6 +178,9 @@ router.post(
     const missing = required.filter((key) => metadata[key] == null)
     if (missing.length > 0) {
       return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
+    }
+    if (!isValidTags(metadata.tags)) {
+      return res.status(400).json({ error: 'tags must be a non-empty array of strings' })
     }
     const project = await getProjectRaw(metadata.projectId)
     if (!project) {
@@ -204,8 +213,7 @@ router.post(
     const bug = await createBug(dbAccess.client, {
       projectId: metadata.projectId,
       title: metadata.title,
-      tag: metadata.tag,
-      tagLabel: resolveTagLabel(metadata.tag),
+      tags: metadata.tags,
       desc: metadata.desc,
       who: metadata.who,
       build: metadata.build,
@@ -228,10 +236,13 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body ?? {}
-    const required = ['projectId', 'title', 'tag', 'desc', 'who', 'build', 'platform']
+    const required = ['projectId', 'title', 'tags', 'desc', 'who', 'build', 'platform']
     const missing = required.filter((key) => body[key] == null || body[key] === '')
     if (missing.length > 0) {
       return res.status(400).json({ error: `missing fields: ${missing.join(', ')}` })
+    }
+    if (!isValidTags(body.tags)) {
+      return res.status(400).json({ error: 'tags must be a non-empty array of strings' })
     }
     if (!(await isProjectMember(Number(body.projectId), req.user.email))) {
       return res.status(404).json({ error: 'not found' })
@@ -247,8 +258,7 @@ router.post(
     const bug = await createBug(resolved.client, {
       projectId: Number(body.projectId),
       title: body.title,
-      tag: body.tag,
-      tagLabel: resolveTagLabel(body.tag),
+      tags: body.tags,
       desc: body.desc,
       who: body.who,
       build: body.build,

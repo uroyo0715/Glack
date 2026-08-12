@@ -275,7 +275,7 @@ test('self_hosted projects block bug creation until Turso/R2 are configured, the
     body: JSON.stringify({
       projectId: project.id,
       title: 'まだ設定前',
-      tag: 'crash',
+      tags: ['crash'],
       desc: 'd',
       who: 'w',
       build: 'b',
@@ -306,7 +306,7 @@ test('self_hosted projects block bug creation until Turso/R2 are configured, the
     body: JSON.stringify({
       projectId: project.id,
       title: '設定後の報告',
-      tag: 'crash',
+      tags: ['crash'],
       desc: 'd',
       who: 'w',
       build: 'b',
@@ -413,4 +413,73 @@ test('PATCH /projects/:id/field-options hides preset options per project, and re
   })
   assert.equal(res2.status, 200)
   assert.deepEqual(await res2.json(), { tag: ['crash'], priority: ['low'], platform: [] })
+})
+
+test('new project defaults to no custom field options', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'カスタム項目テスト')
+  assert.deepEqual(project.customFieldOptions, { tag: [], platform: [] })
+})
+
+test('POST /projects/:id/custom-options requires membership and validates the body', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'カスタム項目権限テスト')
+  const stranger = await createAuthCookie()
+
+  const forbidden = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: stranger.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'tag', value: 'balance' }),
+  })
+  assert.equal(forbidden.status, 404)
+
+  const badField = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'priority', value: 'urgent' }),
+  })
+  assert.equal(badField.status, 400)
+
+  const badValue = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'tag', value: '' }),
+  })
+  assert.equal(badValue.status, 400)
+})
+
+test('POST/DELETE /projects/:id/custom-options adds and removes a project-specific preset', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'カスタム項目追加テスト')
+
+  const added = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'tag', value: 'バランス調整' }),
+  })
+  assert.equal(added.status, 200)
+  assert.deepEqual(await added.json(), { tag: ['バランス調整'], platform: [] })
+
+  // 重複追加はそのまま（増えない）
+  const addedAgain = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'tag', value: 'バランス調整' }),
+  })
+  assert.deepEqual(await addedAgain.json(), { tag: ['バランス調整'], platform: [] })
+
+  const addedPlatform = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'platform', value: 'Steam Deck' }),
+  })
+  assert.deepEqual(await addedPlatform.json(), { tag: ['バランス調整'], platform: ['Steam Deck'] })
+
+  const removed = await fetch(`${getBaseUrl()}/projects/${project.id}/custom-options`, {
+    method: 'DELETE',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field: 'tag', value: 'バランス調整' }),
+  })
+  assert.equal(removed.status, 200)
+  assert.deepEqual(await removed.json(), { tag: [], platform: ['Steam Deck'] })
 })

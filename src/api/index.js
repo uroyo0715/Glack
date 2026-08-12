@@ -15,6 +15,8 @@ export const {
   fetchProjectStorageStatus,
   updateProjectStorage,
   updateProjectFieldOptions,
+  addProjectCustomOption,
+  removeProjectCustomOption,
   fetchReports,
   fetchReport,
   fetchReportFacets,

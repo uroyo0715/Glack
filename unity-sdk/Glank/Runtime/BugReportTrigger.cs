@@ -51,7 +51,7 @@ namespace Glank
 
             SubmitReport(
                 title: "(quick report)",
-                tag: "crash",
+                tags: new[] { "crash" },
                 desc: "",
                 who: SystemInfo.deviceName,
                 build: Application.version,
@@ -59,7 +59,7 @@ namespace Glank
                 priority: "medium");
         }
 
-        public void SubmitReport(string title, string tag, string desc, string who, string build, string platform, string priority)
+        public void SubmitReport(string title, string[] tags, string desc, string who, string build, string platform, string priority)
         {
             if (config == null || (inputLogRecorder == null && CaptureInputLog == null))
             {
@@ -82,7 +82,7 @@ namespace Glank
             {
                 projectId = config.projectId,
                 title = title,
-                tag = tag,
+                tags = tags,
                 desc = desc,
                 who = who,
                 build = build,

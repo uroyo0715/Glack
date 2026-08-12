@@ -18,7 +18,11 @@ namespace Glank
         [SerializeField] private GameObject panelRoot;
 
         [SerializeField] private InputField titleField;
-        [Tooltip("選択肢の並び順は0:crash 1:visual 2:softlock を想定")]
+        [Tooltip(
+            "選択肢の並び順は0:crash 1:visual 2:softlock を想定。\n" +
+            "このクイック入力フォームでは種類は1つだけ選べる（Web UI側は複数タグに対応済み）。" +
+            "複数の種類を付けたい場合は、送信後にWeb UIの編集画面から追加できる。"
+        )]
         [SerializeField] private Dropdown tagDropdown;
         [SerializeField] private InputField descField;
         [Tooltip("選択肢の並び順は0:high 1:medium 2:low を想定")]
@@ -71,7 +75,7 @@ namespace Glank
 
             trigger.SubmitReport(
                 title: title,
-                tag: tag,
+                tags: new[] { tag },
                 desc: desc,
                 who: SystemInfo.deviceName,
                 build: Application.version,

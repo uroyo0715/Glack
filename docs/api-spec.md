@@ -21,9 +21,11 @@
 interface Bug {
   id: string
   title: string
-  // 'crash' | 'visual' | 'softlock' はプリセット（色分け表示あり）。
-  // それ以外の任意の文字列も自由記述の種類として受け付ける（tagLabelはtagと同じ文字列になる）。
-  tag: string
+  // 1件の報告に複数の種類タグを付けられる。'crash' | 'visual' | 'softlock' はプリセット
+  // （色分け表示あり）で、それ以外の任意の文字列も自由記述の種類として受け付ける
+  // （tagLabelsの対応する要素はtagsと同じ文字列になる）。
+  tags: string[]
+  tagLabels: string[]
   status: 'todo' | 'in_progress' | 'review' | 'done'
   desc: string
   who: string            // 報告者 or QA担当者
@@ -110,8 +112,8 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
 `GET/PATCH /reports*`系も同様にプロジェクト単位のメンバーシップでガードされる。
 
 - `GET /projects` — 自分がメンバーのプロジェクトだけを返す。各要素は
-  `{ id, name, imageUrl, bugCount, hiddenFieldOptions }`（`bugCount`はそのプロジェクトに紐づく
-  バグ報告数、`hiddenFieldOptions`は3.0.7参照）。
+  `{ id, name, imageUrl, bugCount, hiddenFieldOptions, customFieldOptions }`（`bugCount`は
+  そのプロジェクトに紐づくバグ報告数、`hiddenFieldOptions`は3.0.7、`customFieldOptions`は3.0.8参照）。
 - `POST /projects` — `multipart/form-data`。`name`（必須）と`image`（任意、ティザー画像）を受け取り、
   作成したプロジェクトを`201`で返す。作成者は自動的にそのプロジェクトのメンバーになる。
 - `DELETE /projects` — body: `{ ids: number[] }`。指定したプロジェクトと、配下の全バグ報告・
@@ -155,10 +157,21 @@ DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由�
   （非表示にするプリセットのvalue一覧）。渡したフィールドだけ更新する部分更新。
   レスポンスは更新後の`{ tag, priority, platform }`。非メンバーは`404`。
 
+#### 3.0.8 独自の種類・プラットフォーム項目（追加/削除）
+
+プリセットの非表示（3.0.7）とは別に、プロジェクト独自の種類・プラットフォーム項目を追加できる
+（優先度は固定3段階のため対象外）。追加した項目はプロジェクトメンバーなら誰でも削除できる。
+
+- `POST /projects/:id/custom-options` — body: `{ field: 'tag' | 'platform', value: string }`。
+  レスポンスは更新後の`{ tag, platform }`（プロジェクトの`customFieldOptions`）。非メンバーは`404`。
+- `DELETE /projects/:id/custom-options` — body: `{ field: 'tag' | 'platform', value: string }`。
+  レスポンスは`POST`と同じ形。
+
 ### 3.1 `GET /reports`
 一覧画面（テーブル/カンバン）用。
 
-Query params: `status`, `tag`, `platform`, `build`, `who`, `q`（タイトル/説明の部分一致）
+Query params: `status`, `tag`, `platform`, `build`, `who`, `q`（タイトル/説明の部分一致）。
+`tag`は完全一致ではなく「そのバグの`tags`配列にこの値が含まれるか」で絞り込む。
 
 `build`・`who`は完全一致。フロントのフィルタUIはテキスト検索ではなく、
 `GET /reports/facets`で取得した既存値からのプルダウン選択にしている（表記ゆれで
@@ -197,7 +210,7 @@ Request body（すべて省略可、渡したものだけ更新）:
 interface PatchReportBody {
   status?: Bug['status']
   title?: string
-  tag?: Bug['tag']
+  tags?: string[] // 空配列は不可（最低1つ必要）
   desc?: string
   who?: string
   build?: string
@@ -214,8 +227,9 @@ interface PatchReportBody {
 { "build": "0.15.0-hotfix" }
 ```
 
-`title`/`tag`/`desc`/`who`/`build`/`platform`を空文字で渡した場合は`400`。
-`priority`は未知の値だと`400`（`tag`はプリセット以外の自由記述も許可するため値のチェックはしない）。
+`title`/`desc`/`who`/`build`/`platform`を空文字で渡した場合は`400`。`tags`を渡す場合は
+空配列だと`400`（プリセット以外の自由記述も許可するため個々の値のチェックはしない）。
+`priority`は未知の値だと`400`。
 
 Response: 更新後の`BugListItem`。
 
@@ -234,7 +248,7 @@ Fields:
 interface ReportMetadata {
   projectId: number
   title: string
-  tag: Bug['tag']
+  tags: string[] // 空配列は不可（最低1つ必要）
   desc: string
   who: string
   build: string
@@ -261,7 +275,7 @@ Content-Type: `application/json`
 interface ManualReportBody {
   projectId: number
   title: string
-  tag: Bug['tag']
+  tags: string[] // 空配列は不可（最低1つ必要）
   desc: string
   who: string
   build: string

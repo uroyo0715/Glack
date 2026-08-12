@@ -13,6 +13,8 @@ import {
   getProjectRaw,
   updateProjectStorageConfig,
   updateProjectFieldOptions,
+  addProjectCustomOption,
+  removeProjectCustomOption,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -245,6 +247,50 @@ router.patch(
 
     const updated = await updateProjectFieldOptions(projectId, update)
     res.json(updated.hiddenFieldOptions)
+  })
+)
+
+// --- 種類・プラットフォームの独自プリセット項目（追加/削除） ---
+
+const CUSTOM_OPTION_FIELDS = ['tag', 'platform']
+
+router.post(
+  '/projects/:id/custom-options',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const { field, value } = req.body ?? {}
+    if (!CUSTOM_OPTION_FIELDS.includes(field)) {
+      return res.status(400).json({ error: `unknown field: ${field}` })
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      return res.status(400).json({ error: 'value must be a non-empty string' })
+    }
+    const updated = await addProjectCustomOption(projectId, field, value.trim())
+    res.json(updated.customFieldOptions)
+  })
+)
+
+router.delete(
+  '/projects/:id/custom-options',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const { field, value } = req.body ?? {}
+    if (!CUSTOM_OPTION_FIELDS.includes(field)) {
+      return res.status(400).json({ error: `unknown field: ${field}` })
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      return res.status(400).json({ error: 'value must be a non-empty string' })
+    }
+    const updated = await removeProjectCustomOption(projectId, field, value.trim())
+    res.json(updated.customFieldOptions)
   })
 )
 

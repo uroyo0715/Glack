@@ -18,13 +18,23 @@ export function resolveTagLabel(tag) {
   return TAG_LABELS[tag] ?? tag
 }
 
+function parseTags(raw) {
+  try {
+    const parsed = JSON.parse(raw ?? '[]')
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : ['未分類']
+  } catch {
+    return ['未分類']
+  }
+}
+
 function rowToListItem(row) {
+  const tags = parseTags(row.tags)
   return {
     id: Number(row.id),
     projectId: Number(row.projectId),
     title: row.title,
-    tag: row.tag,
-    tagLabel: row.tagLabel,
+    tags,
+    tagLabels: tags.map(resolveTagLabel),
     status: row.status,
     desc: row.description,
     who: row.who,
@@ -72,7 +82,7 @@ export async function listBugs(client, { projectId, status, tag, platform, build
     args.push(status)
   }
   if (tag) {
-    sql += ' AND tag = ?'
+    sql += ' AND EXISTS (SELECT 1 FROM json_each(bugs.tags) WHERE json_each.value = ?)'
     args.push(tag)
   }
   if (platform) {
@@ -127,16 +137,16 @@ export async function updateBugStatus(client, id, status) {
 
 // 動画・入力ログ以外の報告メタデータ（タイトル・ビルドバージョン等）は報告後も編集できる。
 // 渡されたフィールドだけを更新する（部分更新）。
-export async function updateBugFields(client, id, { title, tag, desc, who, build, platform, priority } = {}) {
+export async function updateBugFields(client, id, { title, tags, desc, who, build, platform, priority } = {}) {
   const sets = []
   const args = []
   if (title != null) {
     sets.push('title = ?')
     args.push(title)
   }
-  if (tag != null) {
-    sets.push('tag = ?', 'tagLabel = ?')
-    args.push(tag, resolveTagLabel(tag))
+  if (tags != null) {
+    sets.push('tags = ?')
+    args.push(JSON.stringify(tags))
   }
   if (desc != null) {
     sets.push('description = ?')
@@ -202,8 +212,7 @@ export async function resolveBugProjectId(bugId) {
 export async function createBug(client, {
   projectId,
   title,
-  tag,
-  tagLabel,
+  tags,
   desc,
   who,
   build,
@@ -227,14 +236,13 @@ export async function createBug(client, {
   try {
     await tx.execute({
       sql: `INSERT INTO bugs
-          (id, projectId, title, tag, tagLabel, status, description, who, build, platform, priority, videoUrl, videoBytes, fps, durationFrames)
-         VALUES (?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, projectId, title, tags, status, description, who, build, platform, priority, videoUrl, videoBytes, fps, durationFrames)
+         VALUES (?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         bugId,
         projectId,
         title,
-        tag,
-        tagLabel,
+        JSON.stringify(tags),
         desc,
         who,
         build,
@@ -311,6 +319,18 @@ function parseHiddenFieldOptions(raw) {
   }
 }
 
+function parseCustomFieldOptions(raw) {
+  try {
+    const parsed = JSON.parse(raw ?? '{}')
+    return {
+      tag: Array.isArray(parsed.tag) ? parsed.tag : [],
+      platform: Array.isArray(parsed.platform) ? parsed.platform : [],
+    }
+  } catch {
+    return { tag: [], platform: [] }
+  }
+}
+
 function rowToProject(row) {
   return {
     id: Number(row.id),
@@ -318,6 +338,7 @@ function rowToProject(row) {
     imageUrl: row.imageUrl,
     bugCount: Number(row.bugCount),
     hiddenFieldOptions: parseHiddenFieldOptions(row.hiddenFieldOptions),
+    customFieldOptions: parseCustomFieldOptions(row.customFieldOptions),
   }
 }
 
@@ -404,6 +425,40 @@ export async function updateProjectFieldOptions(id, hiddenFieldOptions) {
   }
   await db.execute({
     sql: 'UPDATE projects SET hiddenFieldOptions = ? WHERE id = ?',
+    args: [JSON.stringify(merged), id],
+  })
+  return getProjectById(id)
+}
+
+const CUSTOM_OPTION_FIELDS = ['tag', 'platform']
+
+/**
+ * 種類・プラットフォームに、このプロジェクト独自のプリセット項目を追加する（優先度は固定3段階のため対象外）。
+ * 既定プリセットと違い、こちらは追加した本人たちがいつでも削除できる。
+ */
+export async function addProjectCustomOption(id, field, value) {
+  if (!CUSTOM_OPTION_FIELDS.includes(field)) throw new Error(`unknown field: ${field}`)
+  const current = await getProjectById(id)
+  const list = current.customFieldOptions[field]
+  const next = list.includes(value) ? list : [...list, value]
+  const merged = { ...current.customFieldOptions, [field]: next }
+  await db.execute({
+    sql: 'UPDATE projects SET customFieldOptions = ? WHERE id = ?',
+    args: [JSON.stringify(merged), id],
+  })
+  return getProjectById(id)
+}
+
+/** このプロジェクトが追加した独自の種類・プラットフォーム項目を削除する。 */
+export async function removeProjectCustomOption(id, field, value) {
+  if (!CUSTOM_OPTION_FIELDS.includes(field)) throw new Error(`unknown field: ${field}`)
+  const current = await getProjectById(id)
+  const merged = {
+    ...current.customFieldOptions,
+    [field]: current.customFieldOptions[field].filter((v) => v !== value),
+  }
+  await db.execute({
+    sql: 'UPDATE projects SET customFieldOptions = ? WHERE id = ?',
     args: [JSON.stringify(merged), id],
   })
   return getProjectById(id)

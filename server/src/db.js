@@ -34,8 +34,7 @@ export const BUG_TABLES_SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     projectId INTEGER NOT NULL,
     title TEXT NOT NULL,
-    tag TEXT NOT NULL,
-    tagLabel TEXT NOT NULL,
+    tags TEXT NOT NULL, -- JSON配列の文字列（例: '["crash","visual"]'）。1件のバグ報告に複数の種類タグを付けられる。
     status TEXT NOT NULL,
     description TEXT NOT NULL,
     who TEXT NOT NULL,
@@ -71,8 +70,11 @@ await db.executeMultiple(`
   -- tursoConfigEnc/r2ConfigEnc: self_hosted時の接続情報をAES-256-GCMで暗号化したJSON
   -- （server/src/crypto.js）。未設定の間はNULL。
   -- hiddenFieldOptions: 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは
-  -- 使わないプリセット項目を非表示にするための設定（JSON: {"tag": [...], "priority": [...], "platform": [...]}）。
+  -- 使わない「既定の」プリセット項目を非表示にするための設定（JSON: {"tag": [...], "priority": [...], "platform": [...]}）。
   -- 既存の報告データがそのプリセット値を使っていても、表示上隠すだけでデータ自体は変更しない。
+  -- customFieldOptions: このプロジェクトが追加した独自の種類・プラットフォーム項目
+  -- （JSON: {"tag": [...], "platform": [...]}）。既定プリセットと違い、これは追加/削除ができる
+  -- （優先度は固定の3段階のため対象外）。
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -81,7 +83,8 @@ await db.executeMultiple(`
     isManagedAllowed INTEGER NOT NULL DEFAULT 0,
     tursoConfigEnc TEXT,
     r2ConfigEnc TEXT,
-    hiddenFieldOptions TEXT NOT NULL DEFAULT '{}'
+    hiddenFieldOptions TEXT NOT NULL DEFAULT '{}',
+    customFieldOptions TEXT NOT NULL DEFAULT '{}'
   );
 
   ${BUG_TABLES_SCHEMA}
@@ -206,6 +209,40 @@ async function migrateAddHiddenFieldOptionsIfNeeded() {
 
 await migrateAddHiddenFieldOptionsIfNeeded()
 
+// マイグレーション: customFieldOptions導入前に作られたDBには存在しないため追加する。
+async function migrateAddCustomFieldOptionsIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasColumn = columns.some((c) => c.name === 'customFieldOptions')
+  if (hasColumn) return
+  await db.execute("ALTER TABLE projects ADD COLUMN customFieldOptions TEXT NOT NULL DEFAULT '{}'")
+}
+
+await migrateAddCustomFieldOptionsIfNeeded()
+
+// マイグレーション: 1件のバグ報告に1つだけだった「種類」(tag/tagLabel列)を、複数付けられる
+// tags列（JSON配列の文字列）に置き換える。ラベルはTAG_LABELS（server/src/data.js）から
+// 都度導出するだけなので、tagLabel列自体は特に移行せず読み捨てる（tag列だけをtagsへ変換）。
+// 新規に作られるDBは最初からtags列を持つ（tag列が存在しない）ため、
+// このマイグレーションはtag列が残っている既存DBに対してのみ実行される。
+export async function migrateTagToTags(client) {
+  const { rows: columns } = await client.execute('PRAGMA table_info(bugs)')
+  const hasTag = columns.some((c) => c.name === 'tag')
+  if (!hasTag) return
+  const hasTags = columns.some((c) => c.name === 'tags')
+  if (!hasTags) {
+    await client.execute('ALTER TABLE bugs ADD COLUMN tags TEXT')
+  }
+  const { rows: bugs } = await client.execute('SELECT id, tag FROM bugs WHERE tags IS NULL')
+  for (const row of bugs) {
+    await client.execute({
+      sql: 'UPDATE bugs SET tags = ? WHERE id = ?',
+      args: [JSON.stringify([row.tag]), row.id],
+    })
+  }
+}
+
+await migrateTagToTags(db)
+
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。
 async function migrateAddProjectIdIfNeeded() {
@@ -256,8 +293,7 @@ await migrateBackfillProjectMembers()
 const SEED_BUGS = [
   {
     title: '崖から落ちた直後にゲームがフリーズする',
-    tag: 'crash',
-    tagLabel: 'CRASH',
+    tags: ['crash'],
     status: 'todo',
     desc: '2段ジャンプ後に崖端で着地すると、まれに操作を受け付けなくなる。BGMは鳴り続ける。',
     who: 'tanaka_qa',
@@ -278,8 +314,7 @@ const SEED_BUGS = [
   },
   {
     title: 'インベントリを開くとアイコンが一瞬透ける',
-    tag: 'visual',
-    tagLabel: 'VISUAL',
+    tags: ['visual'],
     status: 'in_progress',
     desc: 'メニューを高速で開閉すると装備アイコンが数フレーム透明になる。見た目のみの問題。',
     who: 'yamada_dev',
@@ -298,8 +333,7 @@ const SEED_BUGS = [
   },
   {
     title: '特定の会話後にキャラが動けなくなる',
-    tag: 'softlock',
-    tagLabel: 'SOFTLOCK',
+    tags: ['softlock'],
     status: 'review',
     desc: '村長との会話イベント終了後、稀に移動入力が反映されなくなる（再現条件不明）。',
     who: 'sato_playtest',
@@ -318,8 +352,7 @@ const SEED_BUGS = [
   },
   {
     title: 'タイトル画面でボタン連打すると多重遷移する',
-    tag: 'crash',
-    tagLabel: 'CRASH',
+    tags: ['crash'],
     status: 'done',
     desc: 'スタートボタンを連打すると同じシーンが二重に読み込まれ、UIが重なって表示される。',
     who: 'tanaka_qa',
@@ -337,8 +370,7 @@ const SEED_BUGS = [
   },
   {
     title: '橋の上でカメラがマップ外にめり込む',
-    tag: 'visual',
-    tagLabel: 'VISUAL',
+    tags: ['visual'],
     status: 'todo',
     desc: '橋の中央付近でカメラを最大まで引くと、地形の外側が見えてしまう。',
     who: 'yamada_dev',
@@ -355,8 +387,7 @@ const SEED_BUGS = [
   },
   {
     title: 'セーブ直後にロードするとアイテム欄が空になる',
-    tag: 'crash',
-    tagLabel: 'CRASH',
+    tags: ['crash'],
     status: 'in_progress',
     desc: 'クイックセーブ直後にクイックロードすると、稀にインベントリデータが初期化される。',
     who: 'sato_playtest',
@@ -373,8 +404,7 @@ const SEED_BUGS = [
   },
   {
     title: 'ボス戦後の会話でテキストが途切れる',
-    tag: 'softlock',
-    tagLabel: 'SOFTLOCK',
+    tags: ['softlock'],
     status: 'todo',
     desc: '長いセリフの途中でボイスが止まり、次の選択肢に進めなくなることがある。',
     who: 'tanaka_qa',
@@ -392,8 +422,7 @@ const SEED_BUGS = [
   },
   {
     title: 'マップ切り替え時に一瞬フレームレートが落ちる',
-    tag: 'visual',
-    tagLabel: 'VISUAL',
+    tags: ['visual'],
     status: 'review',
     desc: 'エリア間の切り替え時、0.5秒ほど極端にカクつく。ロード自体は正常。',
     who: 'yamada_dev',
@@ -407,8 +436,7 @@ const SEED_BUGS = [
   },
   {
     title: '装備変更後にステータス表示が更新されない',
-    tag: 'visual',
-    tagLabel: 'VISUAL',
+    tags: ['visual'],
     status: 'done',
     desc: '武器を変更しても攻撃力の表示が旧値のまま。実際のダメージ計算には影響なし。',
     who: 'sato_playtest',
@@ -440,13 +468,12 @@ async function seedIfEmpty() {
   for (const seedBug of SEED_BUGS) {
     const bugResult = await db.execute({
       sql: `INSERT INTO bugs
-          (projectId, title, tag, tagLabel, status, description, who, build, platform, priority, videoUrl, fps, durationFrames)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (projectId, title, tags, status, description, who, build, platform, priority, videoUrl, fps, durationFrames)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         projectId,
         seedBug.title,
-        seedBug.tag,
-        seedBug.tagLabel,
+        JSON.stringify(seedBug.tags),
         seedBug.status,
         seedBug.desc,
         seedBug.who,

@@ -32,6 +32,9 @@ export default function BugListPage({
   onUpdateStorage,
   hiddenFieldOptions,
   onUpdateFieldOptions,
+  customFieldOptions,
+  onAddCustomOption,
+  onRemoveCustomOption,
   query,
   setQuery,
   statusFilter,
@@ -120,6 +123,9 @@ export default function BugListPage({
         <FieldOptionsPanel
           hiddenFieldOptions={hiddenFieldOptions}
           onUpdateFieldOptions={onUpdateFieldOptions}
+          customFieldOptions={customFieldOptions}
+          onAddCustomOption={onAddCustomOption}
+          onRemoveCustomOption={onRemoveCustomOption}
         />
       )}
 
@@ -141,6 +147,7 @@ export default function BugListPage({
               defaultWho={defaultReporterName}
               buildOptions={reportFacets.builds}
               hiddenFieldOptions={hiddenFieldOptions}
+              customFieldOptions={customFieldOptions}
               onFetchMembers={onFetchMembers}
               onCreate={onCreateReport}
               onClose={() => setShowNewReport(false)}
@@ -196,7 +203,11 @@ export default function BugListPage({
                   <div className="bug-row" key={b.id} onClick={() => onOpen(b.id)}>
                     <div className="col-title">{b.title}</div>
                     <div className="col-tag">
-                      <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
+                      {b.tags.map((t, i) => (
+                        <span className={`tag ${t}`} key={t}>
+                          {b.tagLabels[i]}
+                        </span>
+                      ))}
                     </div>
                     <div className="col-status">
                       <span className={`status-badge ${b.status}`}>{statusLabel(b.status)}</span>
@@ -229,7 +240,11 @@ export default function BugListPage({
                         <div className="bug-card" key={b.id} onClick={() => onOpen(b.id)}>
                           <div className="title">{b.title}</div>
                           <div className="meta">
-                            <span className={`tag ${b.tag}`}>{b.tagLabel}</span>
+                            {b.tags.map((t, i) => (
+                              <span className={`tag ${t}`} key={t}>
+                                {b.tagLabels[i]}
+                              </span>
+                            ))}
                             <span className="who">{b.who}</span>
                           </div>
                         </div>

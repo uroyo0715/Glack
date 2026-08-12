@@ -11,7 +11,7 @@ namespace Glank
     {
         public int projectId;
         public string title;
-        public string tag; // "crash" | "visual" | "softlock"
+        public string[] tags; // 例: {"crash"} または {"crash", "visual"}（1件の報告に複数の種類を付けられる）
         public string desc;
         public string who;
         public string build;

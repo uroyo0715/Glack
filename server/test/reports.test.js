@@ -22,11 +22,11 @@ after(async () => {
   }
 })
 
-function postReportForm({ projectId = project.id, tag = 'crash', priority, includeVideo = true } = {}) {
+function postReportForm({ projectId = project.id, tags = ['crash'], priority, includeVideo = true } = {}) {
   const metadata = {
     projectId,
     title: 'テスト報告',
-    tag,
+    tags,
     desc: '説明',
     who: 'tester',
     build: '0.0.1',
@@ -78,12 +78,12 @@ test('POST /reports rejects unknown projectId', async () => {
   assert.equal(res.status, 400)
 })
 
-test('POST /reports accepts a custom (non-preset) tag and uses it as its own label', async () => {
-  const res = await postReportForm({ tag: 'サウンド不具合' })
+test('POST /reports accepts custom (non-preset) tags and uses them as their own labels', async () => {
+  const res = await postReportForm({ tags: ['crash', 'サウンド不具合'] })
   assert.equal(res.status, 201)
   const bug = await res.json()
-  assert.equal(bug.tag, 'サウンド不具合')
-  assert.equal(bug.tagLabel, 'サウンド不具合')
+  assert.deepEqual(bug.tags, ['crash', 'サウンド不具合'])
+  assert.deepEqual(bug.tagLabels, ['CRASH', 'サウンド不具合'])
   uploadedFiles.push(bug.videoUrl)
 })
 
@@ -112,7 +112,7 @@ test('POST /reports enforces X-Glank-Key when GLANK_API_KEY is set', async () =>
     const metadata = {
       projectId: project.id,
       title: 'キー付きテスト',
-      tag: 'crash',
+      tags: ['crash'],
       desc: 'd',
       who: 'tester',
       build: '0.0.1',
@@ -171,7 +171,7 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
       build: '0.0.2',
       who: 'another-tester',
       platform: 'PS5',
-      tag: 'softlock',
+      tags: ['softlock', 'visual'],
       priority: 'high',
       desc: '修正後の説明',
     }),
@@ -182,8 +182,8 @@ test('PATCH /reports/:id can update metadata fields (title/tag/build/etc.) after
   assert.equal(patched.build, '0.0.2')
   assert.equal(patched.who, 'another-tester')
   assert.equal(patched.platform, 'PS5')
-  assert.equal(patched.tag, 'softlock')
-  assert.equal(patched.tagLabel, 'SOFTLOCK')
+  assert.deepEqual(patched.tags, ['softlock', 'visual'])
+  assert.deepEqual(patched.tagLabels, ['SOFTLOCK', 'VISUAL'])
   assert.equal(patched.priority, 'high')
   assert.equal(patched.desc, '修正後の説明')
   // ステータスは触れていないので元のまま
@@ -209,22 +209,22 @@ test('PATCH /reports/:id rejects empty text fields and unknown priority, but acc
   })
   assert.equal(emptyTitle.status, 400)
 
-  const emptyTag = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
+  const emptyTags = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tag: '' }),
+    body: JSON.stringify({ tags: [] }),
   })
-  assert.equal(emptyTag.status, 400)
+  assert.equal(emptyTags.status, 400)
 
   const customTag = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
     method: 'PATCH',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tag: 'UIの崩れ' }),
+    body: JSON.stringify({ tags: ['UIの崩れ'] }),
   })
   assert.equal(customTag.status, 200)
   const patched = await customTag.json()
-  assert.equal(patched.tag, 'UIの崩れ')
-  assert.equal(patched.tagLabel, 'UIの崩れ')
+  assert.deepEqual(patched.tags, ['UIの崩れ'])
+  assert.deepEqual(patched.tagLabels, ['UIの崩れ'])
 
   const badPriority = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
     method: 'PATCH',
@@ -296,7 +296,7 @@ function manualReportBody(overrides = {}) {
   return {
     projectId: project.id,
     title: '手動報告テスト',
-    tag: 'visual',
+    tags: ['visual'],
     desc: '動画なしの手動報告',
     who: 'tester',
     build: '0.0.1',
@@ -359,12 +359,12 @@ test('POST /reports/manual validates required fields, and accepts a custom tag',
   const customTag = await fetch(`${getBaseUrl()}/reports/manual`, {
     method: 'POST',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify(manualReportBody({ tag: 'その他の不具合' })),
+    body: JSON.stringify(manualReportBody({ tags: ['その他の不具合'] })),
   })
   assert.equal(customTag.status, 201)
   const bug = await customTag.json()
-  assert.equal(bug.tag, 'その他の不具合')
-  assert.equal(bug.tagLabel, 'その他の不具合')
+  assert.deepEqual(bug.tags, ['その他の不具合'])
+  assert.deepEqual(bug.tagLabels, ['その他の不具合'])
 })
 
 test('DELETE /reports/:id deletes the report and requires membership', async () => {
