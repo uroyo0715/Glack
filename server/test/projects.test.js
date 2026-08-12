@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { startServer, stopServer, getBaseUrl, createAuthCookie } from './helpers.js'
+import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
 
 before(startServer)
 after(stopServer)
@@ -482,4 +482,70 @@ test('POST/DELETE /projects/:id/custom-options adds and removes a project-specif
   })
   assert.equal(removed.status, 200)
   assert.deepEqual(await removed.json(), { tag: [], platform: ['Steam Deck'] })
+})
+
+test('PATCH /projects/:id/image sets/replaces the project image, and DELETE clears it', async () => {
+  const owner = await createAuthCookie()
+  const project = await createManagedProject({
+    name: '画像更新テスト',
+    imageUrl: null,
+    creatorEmail: owner.user.email,
+  })
+  assert.equal(project.imageUrl, null)
+
+  const form1 = new FormData()
+  form1.set('image', new Blob([Buffer.from('fake image 1')], { type: 'image/png' }), 'first.png')
+  const firstRes = await fetch(`${getBaseUrl()}/projects/${project.id}/image`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: form1,
+  })
+  assert.equal(firstRes.status, 200)
+  const firstUpdated = await firstRes.json()
+  assert.ok(firstUpdated.imageUrl)
+
+  const form2 = new FormData()
+  form2.set('image', new Blob([Buffer.from('fake image 2')], { type: 'image/png' }), 'second.png')
+  const secondRes = await fetch(`${getBaseUrl()}/projects/${project.id}/image`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: form2,
+  })
+  assert.equal(secondRes.status, 200)
+  const secondUpdated = await secondRes.json()
+  assert.ok(secondUpdated.imageUrl)
+  assert.notEqual(secondUpdated.imageUrl, firstUpdated.imageUrl)
+
+  const deleteRes = await fetch(`${getBaseUrl()}/projects/${project.id}/image`, {
+    method: 'DELETE',
+    headers: { Cookie: owner.cookie },
+  })
+  assert.equal(deleteRes.status, 200)
+  assert.equal((await deleteRes.json()).imageUrl, null)
+})
+
+test('PATCH /projects/:id/image requires membership and an image file', async () => {
+  const owner = await createAuthCookie()
+  const project = await createManagedProject({
+    name: '画像権限テスト',
+    imageUrl: null,
+    creatorEmail: owner.user.email,
+  })
+  const stranger = await createAuthCookie()
+
+  const noFile = await fetch(`${getBaseUrl()}/projects/${project.id}/image`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: new FormData(),
+  })
+  assert.equal(noFile.status, 400)
+
+  const form = new FormData()
+  form.set('image', new Blob([Buffer.from('fake image')], { type: 'image/png' }), 'photo.png')
+  const forbidden = await fetch(`${getBaseUrl()}/projects/${project.id}/image`, {
+    method: 'PATCH',
+    headers: { Cookie: stranger.cookie },
+    body: form,
+  })
+  assert.equal(forbidden.status, 404)
 })

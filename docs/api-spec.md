@@ -117,6 +117,11 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
   そのプロジェクトに紐づくバグ報告数、`hiddenFieldOptions`は3.0.7、`customFieldOptions`は3.0.8参照）。
 - `POST /projects` — `multipart/form-data`。`name`（必須）と`image`（任意、ティザー画像）を受け取り、
   作成したプロジェクトを`201`で返す。作成者は自動的にそのプロジェクトのメンバーになる。
+- `PATCH /projects/:id/image` — `multipart/form-data`。`image`（必須）で作成後のティザー画像を
+  差し替える。古い画像ファイルは削除する。ストレージ未設定（self_hostedでR2未設定）の間は
+  `409 { error, code: 'r2_not_configured' }`。更新後のプロジェクトを返す。非メンバーは`404`。
+- `DELETE /projects/:id/image` — 画像を外す（`imageUrl: null`に戻す）。ファイルも削除する。
+  更新後のプロジェクトを返す。非メンバーは`404`。
 - `DELETE /projects` — body: `{ ids: number[] }`。指定したプロジェクトと、配下の全バグ報告・
   入力ログ・アップロード済み動画ファイルをまとめて削除する（カスケード削除、元に戻せない）。
   自分がメンバーでないidは黙って無視する。`{ deletedProjectIds: number[] }`を返す。

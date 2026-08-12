@@ -24,6 +24,33 @@ export async function createProject(name, imageFile) {
   return res.json()
 }
 
+/** 作成後にティザー画像を差し替える。self_hostedでR2未設定の間は409。
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
+export async function updateProjectImage(projectId, imageFile) {
+  const form = new FormData()
+  form.set('image', imageFile)
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/image`, {
+    method: 'PATCH',
+    credentials: 'include',
+    body: form,
+  })
+  if (!res.ok) await throwApiError(res, `updateProjectImage failed: ${res.status}`)
+  return res.json()
+}
+
+/** @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
+export async function removeProjectImage(projectId) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/image`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `removeProjectImage failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 /** @returns {Promise<{deletedProjectIds: number[]}>} */
 export async function deleteProjects(ids) {
   const res = await fetch(`${BASE_URL}/projects`, {

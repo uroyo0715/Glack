@@ -15,6 +15,7 @@ import {
   updateProjectFieldOptions,
   addProjectCustomOption,
   removeProjectCustomOption,
+  updateProjectImage,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -63,6 +64,52 @@ router.post(
 
     const project = await createProject({ name: name.trim(), imageUrl, creatorEmail: req.user.email })
     res.status(201).json(project)
+  })
+)
+
+// 作成後にティザー画像を差し替える/外す。self_hostedでR2が未設定の間はまだ保存先が無いため409。
+router.patch(
+  '/projects/:id/image',
+  requireAuth,
+  upload.single('image'),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'image file is required' })
+    }
+    const project = await getProjectRaw(projectId)
+    const storageTarget = resolveProjectStorageConfig(project)
+    if (!storageTarget.ready) {
+      return res.status(409).json({ error: 'storage not configured for this project', code: storageTarget.reason })
+    }
+
+    const oldImageUrl = project.imageUrl
+    const { imageUrl } = await saveImage(storageTarget, req.file.buffer, req.file.originalname)
+    const updated = await updateProjectImage(projectId, imageUrl)
+    if (oldImageUrl) await deleteFile(storageTarget, oldImageUrl)
+
+    res.json(updated)
+  })
+)
+
+router.delete(
+  '/projects/:id/image',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const project = await getProjectRaw(projectId)
+    if (project.imageUrl) {
+      const storageTarget = resolveProjectStorageConfig(project)
+      if (storageTarget.ready) await deleteFile(storageTarget, project.imageUrl)
+    }
+    const updated = await updateProjectImage(projectId, null)
+    res.json(updated)
   })
 )
 

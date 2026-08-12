@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjectsPage from './ProjectsPage.jsx'
 
@@ -15,6 +15,8 @@ function renderPage(overrides = {}) {
     onCreate: vi.fn(),
     onDelete: vi.fn().mockResolvedValue({ deletedProjectIds: [] }),
     onOpenHelp: vi.fn(),
+    onUpdateImage: vi.fn().mockResolvedValue({ id: 1, name: 'Nightfall Trail', imageUrl: 'blob:new' }),
+    onRemoveImage: vi.fn().mockResolvedValue({ id: 2, name: 'Second Game', imageUrl: null }),
     ...overrides,
   }
   render(<ProjectsPage {...props} />)
@@ -74,6 +76,35 @@ describe('ProjectsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /Unity連携の使い方/ }))
     expect(props.onOpenHelp).toHaveBeenCalledTimes(1)
+  })
+
+  describe('project image', () => {
+    it('lets the user change a project image without opening the project', async () => {
+      const user = userEvent.setup()
+      const props = renderPage()
+      const card = screen.getByText('Nightfall Trail').closest('.project-card')
+
+      const file = new File(['fake'], 'photo.png', { type: 'image/png' })
+      const input = card.querySelector('input[type="file"]')
+      await user.upload(input, file)
+
+      expect(props.onUpdateImage).toHaveBeenCalledWith(1, file)
+      expect(props.onOpen).not.toHaveBeenCalled()
+    })
+
+    it('only shows the remove button for a project that already has an image, and it does not open the project', async () => {
+      const user = userEvent.setup()
+      const props = renderPage()
+
+      const cardWithoutImage = screen.getByText('Nightfall Trail').closest('.project-card')
+      expect(within(cardWithoutImage).queryByTitle('画像を外す')).not.toBeInTheDocument()
+
+      const cardWithImage = screen.getByText('Second Game').closest('.project-card')
+      await user.click(within(cardWithImage).getByTitle('画像を外す'))
+
+      expect(props.onRemoveImage).toHaveBeenCalledWith(2)
+      expect(props.onOpen).not.toHaveBeenCalled()
+    })
   })
 
   describe('selection + delete', () => {

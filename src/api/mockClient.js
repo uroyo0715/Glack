@@ -121,6 +121,39 @@ export async function createProject(name, imageFile) {
   return project
 }
 
+function requireImageStorageReady(projectId) {
+  const status = storageByProject.get(Number(projectId))
+  if (!status) return
+  const usingManaged = status.storageMode === 'managed' && status.isManagedAllowed
+  if (usingManaged) return
+  if (!status.r2Configured) {
+    const err = new Error('storage not configured for this project')
+    err.code = 'r2_not_configured'
+    throw err
+  }
+}
+
+/** 作成後にティザー画像を差し替える。
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
+export async function updateProjectImage(projectId, imageFile) {
+  await delay(150)
+  requireLogin()
+  requireImageStorageReady(projectId)
+  const id = Number(projectId)
+  const imageUrl = URL.createObjectURL(imageFile)
+  projects = projects.map((p) => (p.id === id ? { ...p, imageUrl } : p))
+  return projects.find((p) => p.id === id)
+}
+
+/** @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
+export async function removeProjectImage(projectId) {
+  await delay(100)
+  requireLogin()
+  const id = Number(projectId)
+  projects = projects.map((p) => (p.id === id ? { ...p, imageUrl: null } : p))
+  return projects.find((p) => p.id === id)
+}
+
 /** @returns {Promise<{tag: string[], priority: string[], platform: string[]}>} */
 export async function updateProjectFieldOptions(projectId, fieldOptions) {
   await delay(100)

@@ -575,6 +575,15 @@ export async function createProject({ name, imageUrl, creatorEmail }) {
   return getProjectById(projectId)
 }
 
+/** ティザー画像を作成後に差し替える/外す。imageUrlにnullを渡すと画像なしに戻す。 */
+export async function updateProjectImage(id, imageUrl) {
+  await db.execute({
+    sql: 'UPDATE projects SET imageUrl = ? WHERE id = ?',
+    args: [imageUrl, id],
+  })
+  return getProjectById(id)
+}
+
 /**
  * 指定したプロジェクトと、その配下のプロジェクトメンバー行を削除する。
  * バグ報告自体の削除は呼び出し側で resolveProjectDbClient() + deleteAllBugsForProject() を使う

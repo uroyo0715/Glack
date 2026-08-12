@@ -1,6 +1,14 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 
-export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onOpenHelp }) {
+export default function ProjectsPage({
+  projects,
+  onOpen,
+  onCreate,
+  onDelete,
+  onOpenHelp,
+  onUpdateImage,
+  onRemoveImage,
+}) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [imageFile, setImageFile] = useState(null)
@@ -13,6 +21,10 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+
+  const [updatingImageId, setUpdatingImageId] = useState(null)
+  const [imageErrorById, setImageErrorById] = useState({})
+  const imageInputRefs = useRef({}) // projectId -> <input type="file">
 
   function handleImageChange(e) {
     const file = e.target.files?.[0] ?? null
@@ -60,6 +72,12 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
     else onOpen(p.id)
   }
 
+  function handleCardKeyDown(e, p) {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    handleCardClick(p)
+  }
+
   const selectedProjects = projects.filter((p) => selectedIds.has(p.id))
   const affectedBugCount = selectedProjects.reduce((sum, p) => sum + (p.bugCount ?? 0), 0)
 
@@ -74,6 +92,35 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
       })
       .catch((err) => setDeleteError(err.message ?? String(err)))
       .finally(() => setDeleting(false))
+  }
+
+  function handleImageEditClick(e, projectId) {
+    e.stopPropagation()
+    imageInputRefs.current[projectId]?.click()
+  }
+
+  function handleImageFileChange(e, projectId) {
+    const file = e.target.files?.[0] ?? null
+    e.target.value = '' // 同じファイルを続けて選んでもchangeが発火するように
+    if (!file) return
+    setUpdatingImageId(projectId)
+    setImageErrorById((prev) => ({ ...prev, [projectId]: null }))
+    onUpdateImage(projectId, file)
+      .catch((err) => {
+        setImageErrorById((prev) => ({ ...prev, [projectId]: err.message ?? String(err) }))
+      })
+      .finally(() => setUpdatingImageId(null))
+  }
+
+  function handleImageRemoveClick(e, projectId) {
+    e.stopPropagation()
+    setUpdatingImageId(projectId)
+    setImageErrorById((prev) => ({ ...prev, [projectId]: null }))
+    onRemoveImage(projectId)
+      .catch((err) => {
+        setImageErrorById((prev) => ({ ...prev, [projectId]: err.message ?? String(err) }))
+      })
+      .finally(() => setUpdatingImageId(null))
   }
 
   return (
@@ -127,12 +174,15 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
 
       <div className="project-grid">
         {projects.map((p) => (
-          <button
+          <div
             className={`project-card ${selecting ? 'selectable' : ''} ${
               selectedIds.has(p.id) ? 'selected' : ''
             }`}
             key={p.id}
+            role="button"
+            tabIndex={0}
             onClick={() => handleCardClick(p)}
+            onKeyDown={(e) => handleCardKeyDown(e, p)}
           >
             {selecting && (
               <div className={`project-card-checkbox ${selectedIds.has(p.id) ? 'checked' : ''}`} />
@@ -142,10 +192,44 @@ export default function ProjectsPage({ projects, onOpen, onCreate, onDelete, onO
               style={p.imageUrl ? { backgroundImage: `url(${p.imageUrl})` } : undefined}
             >
               {!p.imageUrl && <span className="project-card-placeholder">No Image</span>}
+              {!selecting && (
+                <div className="project-card-image-actions">
+                  <button
+                    type="button"
+                    className="project-card-image-edit"
+                    onClick={(e) => handleImageEditClick(e, p.id)}
+                    disabled={updatingImageId === p.id}
+                  >
+                    {updatingImageId === p.id ? '更新中...' : '画像を変更'}
+                  </button>
+                  {p.imageUrl && (
+                    <button
+                      type="button"
+                      className="project-card-image-remove"
+                      onClick={(e) => handleImageRemoveClick(e, p.id)}
+                      disabled={updatingImageId === p.id}
+                      title="画像を外す"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                ref={(el) => {
+                  imageInputRefs.current[p.id] = el
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => handleImageFileChange(e, p.id)}
+              />
             </div>
             <div className="project-card-name">{p.name}</div>
             <div className="project-card-id mono">ID: {p.id}</div>
-          </button>
+            {imageErrorById[p.id] && <div className="project-form-error">{imageErrorById[p.id]}</div>}
+          </div>
         ))}
 
         {!selecting &&
