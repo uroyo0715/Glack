@@ -5,6 +5,7 @@ import {
   getBugById,
   updateBugStatus,
   updateBugFields,
+  attachBugVideo,
   deleteBug,
   listReportFacets,
   createBug,
@@ -172,6 +173,57 @@ router.patch(
       updated = existingListItem
     }
     res.json(updated)
+  })
+)
+
+// Web UIから動画なしで作成した報告（/reports/manual）に、あとから動画を付け足す/差し替える経路。
+// 実際の入力ログ（bugInputs）は無いままなので、操作ログ帯は出ず動画のみ再生できるようになる。
+router.patch(
+  '/reports/:id/video',
+  requireAuth,
+  upload.single('video'),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id)
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'video file is required' })
+    }
+    const fps = Number(req.body.fps)
+    const durationFrames = Number(req.body.durationFrames)
+    if (!Number.isFinite(fps) || fps <= 0 || !Number.isFinite(durationFrames) || durationFrames <= 0) {
+      return res.status(400).json({ error: 'fps and durationFrames must be positive numbers' })
+    }
+
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+    const { project, client } = resolved
+
+    const existing = await getBugById(client, id)
+    if (!existing) return res.status(404).json({ error: 'not found' })
+
+    const storageTarget = resolveProjectStorageConfig(project)
+    if (!storageTarget.ready) {
+      return res.status(409).json({ error: 'storage not configured for this project', code: storageTarget.reason })
+    }
+    const quota = await checkManagedStorageQuota(project, req.file.size)
+    if (!quota.ok) {
+      return res.status(413).json({ error: 'storage quota exceeded', code: quota.reason })
+    }
+
+    const { videoUrl, bytes } = await saveVideo(storageTarget, req.file.buffer, req.file.originalname)
+    if (storageTarget.managed) await addManagedStorageUsage(project.id, bytes)
+
+    const result = await attachBugVideo(client, id, { videoUrl, videoBytes: bytes, fps, durationFrames })
+    if (result?.previousVideoUrl) {
+      await deleteFile(storageTarget, result.previousVideoUrl)
+      if (storageTarget.managed && result.previousVideoBytes) {
+        await addManagedStorageUsage(project.id, -result.previousVideoBytes)
+      }
+    }
+    res.json(await getBugById(client, id))
   })
 )
 

@@ -379,6 +379,26 @@ export async function createManualReport(projectId, fields) {
   return bug
 }
 
+/** Web UIから動画なしで作成した報告に、あとから動画を付け足す/差し替える。
+ * @returns {Promise<import('./types.js').Bug>} */
+export async function attachReportVideo(id, { videoFile, fps, durationFrames }) {
+  await delay(150)
+  requireLogin()
+  const bug = bugs.find((b) => String(b.id) === String(id))
+  if (!bug) throw new Error(`attachReportVideo: not found (${id})`)
+  requireStorageReady(bug.projectId)
+  if (!videoFile) throw new Error('video file is required')
+  if (!(fps > 0) || !(durationFrames > 0)) {
+    throw new Error('fps and durationFrames must be positive numbers')
+  }
+  bugs = bugs.map((b) =>
+    String(b.id) === String(id)
+      ? { ...b, videoUrl: URL.createObjectURL(videoFile), fps, durationFrames }
+      : b
+  )
+  return bugs.find((b) => String(b.id) === String(id))
+}
+
 /** @returns {Promise<import('./types.js').Bug>} */
 export async function fetchReport(id) {
   await delay()

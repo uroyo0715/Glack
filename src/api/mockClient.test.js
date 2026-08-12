@@ -85,6 +85,59 @@ describe('mockClient reports', () => {
     const refetched = await client.fetchReport(target.id)
     expect(refetched.status).toBe('in_progress')
   })
+
+  it('attachReportVideo sets videoUrl/fps/durationFrames on a report created with no video', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const created = await client.createManualReport(1, {
+      title: 'テキストのみ報告',
+      tags: ['crash'],
+      desc: '説明',
+      who: 'tester',
+      build: '0.0.1',
+      platform: 'PC',
+    })
+    expect(created.videoUrl).toBe('')
+
+    const videoFile = new File(['fake'], 'later.mp4', { type: 'video/mp4' })
+    const updated = await client.attachReportVideo(created.id, {
+      videoFile,
+      fps: 30,
+      durationFrames: 90,
+    })
+    expect(updated.videoUrl).toBeTruthy()
+    expect(updated.fps).toBe(30)
+    expect(updated.durationFrames).toBe(90)
+
+    const refetched = await client.fetchReport(created.id)
+    expect(refetched.videoUrl).toBe(updated.videoUrl)
+  })
+
+  it('attachReportVideo rejects a missing file or non-positive fps/durationFrames, and unknown ids', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const created = await client.createManualReport(1, {
+      title: 'テキストのみ報告2',
+      tags: ['crash'],
+      desc: '説明',
+      who: 'tester',
+      build: '0.0.1',
+      platform: 'PC',
+    })
+    const videoFile = new File(['fake'], 'later.mp4', { type: 'video/mp4' })
+
+    await expect(
+      client.attachReportVideo(created.id, { videoFile: null, fps: 30, durationFrames: 90 })
+    ).rejects.toThrow('video file is required')
+    await expect(
+      client.attachReportVideo(created.id, { videoFile, fps: 0, durationFrames: 90 })
+    ).rejects.toThrow('fps and durationFrames must be positive numbers')
+    await expect(
+      client.attachReportVideo(999999, { videoFile, fps: 30, durationFrames: 90 })
+    ).rejects.toThrow('not found')
+  })
 })
 
 describe('mockClient projects', () => {

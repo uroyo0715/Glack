@@ -25,6 +25,7 @@ import {
   updateReportFields,
   deleteReport,
   createManualReport,
+  attachReportVideo,
   loginWithGoogle,
   logout,
   me,
@@ -333,6 +334,34 @@ export default function App() {
     })
   }
 
+  // ファイルの実時間(秒)をブラウザで読み取り、固定fps=30換算のフレーム数にする。
+  // 実際の操作ログ(inputs)は無いままなので、動画プレイヤーの再生時間を合わせるためだけに使う。
+  function readVideoDurationSeconds(videoFile) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src)
+        resolve(video.duration)
+      }
+      video.onerror = () => {
+        URL.revokeObjectURL(video.src)
+        reject(new Error('動画の長さを読み取れませんでした'))
+      }
+      video.src = URL.createObjectURL(videoFile)
+    })
+  }
+
+  function handleAttachVideo(id, videoFile) {
+    const fps = 30
+    return readVideoDurationSeconds(videoFile)
+      .then((seconds) => attachReportVideo(id, { videoFile, fps, durationFrames: Math.max(1, Math.round(seconds * fps)) }))
+      .then((updated) => {
+        setSelectedBug((prev) => (prev && prev.id === id ? { ...prev, ...updated } : prev))
+        return updated
+      })
+  }
+
   function handleDeleteReport(id) {
     return deleteReport(id).then((result) => {
       setBugs((prev) => prev.filter((b) => b.id !== id))
@@ -514,6 +543,7 @@ export default function App() {
               bug={selectedBug}
               onStatusChange={updateStatus}
               onUpdateReport={handleUpdateReport}
+              onAttachVideo={handleAttachVideo}
               onDeleteReport={handleDeleteReport}
               buildOptions={reportFacets.builds}
               hiddenFieldOptions={selectedProject?.hiddenFieldOptions}

@@ -205,6 +205,27 @@ export async function updateBugFields(
   return rows[0] ? rowToListItem(rows[0]) : null
 }
 
+/**
+ * Web UIから動画なしで作成した報告に、あとから動画を付け足す/差し替える。
+ * 既存の動画ファイル自体の削除は呼び出し側（storage.js）で行う。
+ * @returns {Promise<{ previousVideoUrl: string, previousVideoBytes: number }>}
+ */
+export async function attachBugVideo(client, id, { videoUrl, videoBytes, fps, durationFrames }) {
+  const { rows } = await client.execute({
+    sql: 'SELECT videoUrl, videoBytes FROM bugs WHERE id = ?',
+    args: [id],
+  })
+  if (!rows[0]) return null
+  const previousVideoUrl = rows[0].videoUrl
+  const previousVideoBytes = Number(rows[0].videoBytes ?? 0)
+
+  await client.execute({
+    sql: 'UPDATE bugs SET videoUrl = ?, videoBytes = ?, fps = ?, durationFrames = ? WHERE id = ?',
+    args: [videoUrl, videoBytes ?? 0, fps, durationFrames, id],
+  })
+  return { previousVideoUrl, previousVideoBytes }
+}
+
 /** バグ報告を削除する。存在しなければnullを返す。動画ファイル自体の削除は呼び出し側（storage.js）で行う。 */
 export async function deleteBug(client, id) {
   const { rows } = await client.execute({

@@ -32,6 +32,7 @@ export default function BugDetailPage({
   bug,
   onStatusChange,
   onUpdateReport,
+  onAttachVideo,
   buildOptions,
   hiddenFieldOptions,
   customFieldOptions,
@@ -44,6 +45,8 @@ export default function BugDetailPage({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [attachingVideo, setAttachingVideo] = useState(false)
+  const [attachVideoError, setAttachVideoError] = useState(null)
   const [detailWidth, setDetailWidth] = useState(loadStoredWidth)
   const [resizingWidth, setResizingWidth] = useState(false)
   const [logLayout, setLogLayout] = useState(loadStoredLogLayout) // 'side' | 'below'
@@ -59,6 +62,7 @@ export default function BugDetailPage({
     setEditing(false)
     setConfirmingDelete(false)
     setDeleteError(null)
+    setAttachVideoError(null)
   }, [bug.id])
 
   // 対応者のプルダウンはプロジェクトメンバーの表示名から選ぶ（報告者選択と同じ考え方）。
@@ -80,6 +84,17 @@ export default function BugDetailPage({
 
   function handleAssigneeChange(e) {
     onUpdateReport(bug.id, { assignee: e.target.value })
+  }
+
+  function handleAttachVideoChange(e) {
+    const file = e.target.files?.[0] ?? null
+    e.target.value = ''
+    if (!file) return
+    setAttachingVideo(true)
+    setAttachVideoError(null)
+    onAttachVideo(bug.id, file)
+      .catch((err) => setAttachVideoError(err.message ?? String(err)))
+      .finally(() => setAttachingVideo(false))
   }
 
   function handleSelectFrame(frame) {
@@ -250,7 +265,18 @@ export default function BugDetailPage({
           </>
         ) : (
           <div className="no-video-hint">
-            録画・入力ログはありません（Web UIから手動作成された報告です）。
+            <p>録画・入力ログはありません（Web UIから手動作成された報告です）。</p>
+            <label className="no-video-attach-button">
+              {attachingVideo ? 'アップロード中...' : '動画を追加'}
+              <input
+                type="file"
+                accept="video/*"
+                onChange={handleAttachVideoChange}
+                disabled={attachingVideo}
+                hidden
+              />
+            </label>
+            {attachVideoError && <div className="project-form-error">{attachVideoError}</div>}
           </div>
         )}
 

@@ -288,6 +288,24 @@ export async function createManualReport(projectId, fields) {
   return res.json()
 }
 
+/**
+ * Web UIから動画なしで作成した報告に、あとから動画を付け足す/差し替える。
+ * @returns {Promise<import('./types.js').Bug>}
+ */
+export async function attachReportVideo(id, { videoFile, fps, durationFrames }) {
+  const form = new FormData()
+  form.set('video', videoFile)
+  form.set('fps', String(fps))
+  form.set('durationFrames', String(durationFrames))
+  const res = await fetch(`${BASE_URL}/reports/${id}/video`, {
+    method: 'PATCH',
+    credentials: 'include',
+    body: form,
+  })
+  if (!res.ok) await throwApiError(res, `attachReportVideo failed: ${res.status}`)
+  return res.json()
+}
+
 // GoogleのOAuth同意画面へブラウザごと遷移させる必要があるため、fetchではなく
 // 実際のページ遷移で行う。遷移が起きるのでこのPromiseは意図的に解決しない。
 export async function loginWithGoogle() {

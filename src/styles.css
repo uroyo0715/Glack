@@ -1553,6 +1553,27 @@ body {
   color: var(--text-dim);
   font-size: 13px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.no-video-hint p {
+  margin: 0;
+}
+.no-video-attach-button {
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.no-video-attach-button:hover {
+  border-color: var(--accent-amber);
 }
 
 .video-wrap {

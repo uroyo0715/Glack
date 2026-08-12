@@ -451,6 +451,91 @@ test('POST /reports/manual validates required fields, and accepts a custom tag',
   assert.deepEqual(bug.tagLabels, ['その他の不具合'])
 })
 
+function attachVideoForm({ fps = 30, durationFrames = 90 } = {}) {
+  const form = new FormData()
+  form.set('fps', String(fps))
+  form.set('durationFrames', String(durationFrames))
+  form.set('video', new Blob([Buffer.from('fake video bytes')], { type: 'video/mp4' }), 'later.mp4')
+  return form
+}
+
+test('PATCH /reports/:id/video attaches a video to a manually-created report with no video', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (
+    await fetch(`${getBaseUrl()}/reports/manual`, {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(manualReportBody()),
+    })
+  ).json()
+  assert.equal(created.videoUrl, '')
+
+  const res = await fetch(`${getBaseUrl()}/reports/${created.id}/video`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie },
+    body: attachVideoForm(),
+  })
+  assert.equal(res.status, 200)
+  const updated = await res.json()
+  uploadedFiles.push(updated.videoUrl)
+  assert.notEqual(updated.videoUrl, '')
+  assert.equal(updated.fps, 30)
+  assert.equal(updated.durationFrames, 90)
+  assert.deepEqual(updated.inputs, [])
+
+  const videoPath = path.join(import.meta.dirname, '..', updated.videoUrl.replace(/^\//, ''))
+  assert.equal(fs.existsSync(videoPath), true)
+})
+
+test('PATCH /reports/:id/video replaces an existing video and deletes the old file', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  const oldVideoPath = path.join(import.meta.dirname, '..', created.videoUrl.replace(/^\//, ''))
+  assert.equal(fs.existsSync(oldVideoPath), true)
+
+  const res = await fetch(`${getBaseUrl()}/reports/${created.id}/video`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie },
+    body: attachVideoForm({ fps: 24, durationFrames: 48 }),
+  })
+  assert.equal(res.status, 200)
+  const updated = await res.json()
+  uploadedFiles.push(updated.videoUrl)
+  assert.notEqual(updated.videoUrl, created.videoUrl)
+  assert.equal(fs.existsSync(oldVideoPath), false)
+})
+
+test('PATCH /reports/:id/video requires membership, a video file, and positive fps/durationFrames', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const stranger = await createAuthCookie()
+  const strangerRes = await fetch(`${getBaseUrl()}/reports/${created.id}/video`, {
+    method: 'PATCH',
+    headers: { Cookie: stranger.cookie },
+    body: attachVideoForm(),
+  })
+  assert.equal(strangerRes.status, 404)
+
+  const noFile = new FormData()
+  noFile.set('fps', '30')
+  noFile.set('durationFrames', '90')
+  const noFileRes = await fetch(`${getBaseUrl()}/reports/${created.id}/video`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie },
+    body: noFile,
+  })
+  assert.equal(noFileRes.status, 400)
+
+  const badFrames = await fetch(`${getBaseUrl()}/reports/${created.id}/video`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie },
+    body: attachVideoForm({ fps: 0, durationFrames: 90 }),
+  })
+  assert.equal(badFrames.status, 400)
+})
+
 test('DELETE /reports/:id deletes the report and requires membership', async () => {
   const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()

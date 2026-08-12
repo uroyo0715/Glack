@@ -304,6 +304,24 @@ Response: `201 Created`、作成された`Bug`。`videoUrl`は空文字、`fps`/
 `inputs`は`[]`になる（動画・入力ログなしを表す）。フロント側（`BugDetailPage.jsx`）はこれを見て
 動画プレイヤーと操作ログ帯を表示せず、代わりに「録画なし」の案内を出す。
 
+### 3.4.6 `PATCH /reports/:id/video`（あとから動画を付け足す/差し替える）
+
+`/reports/manual`で動画なしのまま作成した報告に、あとから動画ファイルを追加できるようにする経路。
+`multipart/form-data`。既に動画がある報告に対して呼ぶと差し替え（古いファイルは削除）になる。
+`requireAuth` + プロジェクトメンバーシップで認可。ストレージ未設定（self_hostedでR2未設定）の間は
+`409 { error, code: 'r2_not_configured' }`。
+
+```ts
+interface AttachVideoForm {
+  video: File
+  fps: number // 正の数値。実際の入力ログ(bugInputs)は追加されないため、再生時間の計算にのみ使う
+  durationFrames: number // 正の数値
+}
+```
+
+Response: 更新後の`Bug`（`inputs`は引き続き`[]`のまま。実際の操作ログは無いため、
+動画プレイヤーのみ有効になり操作ログ帯は表示されない）。非メンバー/存在しない報告は`404`。
+
 ### 3.5 `DELETE /reports/:id`
 バグ報告を削除する。動画ファイルがある場合はあわせて削除する（`storage.js`経由）。
 入力ログ（`bugInputs`）も一緒に削除する。

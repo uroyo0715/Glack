@@ -27,6 +27,7 @@ export const {
   updateReportFields,
   deleteReport,
   createManualReport,
+  attachReportVideo,
   loginWithGoogle,
   logout,
   me,
