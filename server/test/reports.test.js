@@ -80,6 +80,41 @@ test('GET /reports filters by priority', async () => {
   assert.ok(!results.some((b) => b.id === low.id))
 })
 
+test('GET /reports filters by assignee, and GET /reports/facets lists assignees actually in use', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const assigneeProject = await createManagedProject({ name: '対応者フィルタ用', imageUrl: null, creatorEmail: PROJECT_OWNER_EMAIL })
+
+  const created = await (await postReportForm({ projectId: assigneeProject.id })).json()
+  uploadedFiles.push(created.videoUrl)
+  assert.equal(created.assignee, '')
+
+  const assignRes = await fetch(`${getBaseUrl()}/reports/${created.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assignee: 'yamada_dev' }),
+  })
+  assert.equal(assignRes.status, 200)
+
+  const filtered = await fetch(`${getBaseUrl()}/reports?projectId=${assigneeProject.id}&assignee=yamada_dev`, {
+    headers: { Cookie: cookie },
+  })
+  assert.equal(filtered.status, 200)
+  const results = await filtered.json()
+  assert.ok(results.every((b) => b.assignee === 'yamada_dev'))
+  assert.ok(results.some((b) => b.id === created.id))
+
+  const noMatch = await fetch(`${getBaseUrl()}/reports?projectId=${assigneeProject.id}&assignee=nobody`, {
+    headers: { Cookie: cookie },
+  })
+  assert.deepEqual(await noMatch.json(), [])
+
+  const facetsRes = await fetch(`${getBaseUrl()}/reports/facets?projectId=${assigneeProject.id}`, {
+    headers: { Cookie: cookie },
+  })
+  const facets = await facetsRes.json()
+  assert.deepEqual(facets.assignees, ['yamada_dev'])
+})
+
 test('POST /reports creates a bug with valid data (no API key configured)', async () => {
   delete process.env.GLANK_API_KEY
   const res = await postReportForm()
@@ -296,7 +331,12 @@ test('GET /reports/facets returns distinct build/who/tag values used in the proj
   })
   assert.equal(res.status, 200)
   const facets = await res.json()
-  assert.deepEqual(facets, { builds: ['1.2.0'], whos: ['alice'], tags: ['crash', 'サウンド不具合'] })
+  assert.deepEqual(facets, {
+    builds: ['1.2.0'],
+    whos: ['alice'],
+    assignees: [],
+    tags: ['crash', 'サウンド不具合'],
+  })
 })
 
 test('GET /reports/facets requires auth and membership', async () => {

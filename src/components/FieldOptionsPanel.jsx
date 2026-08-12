@@ -4,7 +4,7 @@ import { TAG_OPTIONS, PRIORITY_OPTIONS, PLATFORM_OPTIONS } from '../data/mockBug
 const FIELDS = [
   {
     key: 'tag',
-    label: '種類',
+    label: 'タグ',
     options: TAG_OPTIONS.map((t) => ({ value: t.key, label: t.label })),
     canAddCustom: true,
   },
@@ -72,7 +72,7 @@ export default function FieldOptionsPanel({
       <div className="members-panel-label">選択肢の管理</div>
       <p className="storage-panel-hint">
         既定の項目は使わないものをオフにすると報告フォームのプルダウンから消えます。
-        種類・プラットフォームはこのプロジェクト独自の項目を追加でき、追加したものはいつでも削除できます
+        タグ・プラットフォームはこのプロジェクト独自の項目を追加でき、追加したものはいつでも削除できます
         （既存の報告データは変わりません）。
       </p>
       {error && <div className="project-form-error">{error}</div>}

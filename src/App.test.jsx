@@ -60,6 +60,20 @@ describe('App (mock client integration)', () => {
     await waitFor(() => expect(assigneeSelect.value).toBe('デモユーザー'))
   })
 
+  it('returns to the project list from any screen by clicking the Glank brand logo', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Googleでログイン' }))
+    await user.click(await screen.findByText('Nightfall Trail'))
+    await user.click(await screen.findByText('崖から落ちた直後にゲームがフリーズする'))
+    await screen.findByRole('heading', { name: '崖から落ちた直後にゲームがフリーズする' })
+
+    await user.click(screen.getByRole('button', { name: 'Glank' }))
+    await screen.findByText('プロジェクト')
+    expect(await screen.findByText('Nightfall Trail')).toBeInTheDocument()
+  })
+
   it('deletes a bug report from the detail page and returns to the list', async () => {
     const user = userEvent.setup()
     render(<App />)

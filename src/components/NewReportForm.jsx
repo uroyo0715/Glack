@@ -91,7 +91,7 @@ export default function NewReportForm({
         </label>
 
         <div className="new-report-field new-report-field-wide">
-          <span>種類（複数選択可）</span>
+          <span>タグ（複数選択可）</span>
           <TagMultiField
             value={fields.tags}
             onChange={(v) => setField('tags', v)}

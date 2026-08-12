@@ -59,7 +59,8 @@ export default function App() {
   const [priorityFilter, setPriorityFilter] = useState(ALL_PRIORITIES)
   const [buildFilter, setBuildFilter] = useState('')
   const [whoFilter, setWhoFilter] = useState('')
-  const [reportFacets, setReportFacets] = useState({ builds: [], whos: [], tags: [] })
+  const [assigneeFilter, setAssigneeFilter] = useState('')
+  const [reportFacets, setReportFacets] = useState({ builds: [], whos: [], assignees: [], tags: [] })
   const [facetsReloadToken, setFacetsReloadToken] = useState(0)
 
   const [selectedId, setSelectedId] = useState(null)
@@ -208,6 +209,7 @@ export default function App() {
     if (priorityFilter.length === 1) filters.priority = priorityFilter[0]
     if (buildFilter) filters.build = buildFilter
     if (whoFilter) filters.who = whoFilter
+    if (assigneeFilter) filters.assignee = assigneeFilter
 
     fetchReports(filters)
       .then((result) => {
@@ -244,6 +246,7 @@ export default function App() {
     priorityFilter,
     buildFilter,
     whoFilter,
+    assigneeFilter,
     reloadToken,
   ])
 
@@ -257,7 +260,7 @@ export default function App() {
         if (!cancelled) setReportFacets(result)
       })
       .catch(() => {
-        if (!cancelled) setReportFacets({ builds: [], whos: [], tags: [] })
+        if (!cancelled) setReportFacets({ builds: [], whos: [], assignees: [], tags: [] })
       })
     return () => {
       cancelled = true
@@ -379,11 +382,19 @@ export default function App() {
     setPriorityFilter(ALL_PRIORITIES)
     setBuildFilter('')
     setWhoFilter('')
+    setAssigneeFilter('')
     setBugsLoadedOnce(false)
     setStorageStatus(null)
   }
 
   function backToProjects() {
+    setSelectedProjectId(null)
+    setSelectedId(null)
+  }
+
+  // 左上のブランドロゴから、どの画面にいてもプロジェクト一覧に戻れるようにする。
+  function goToProjectsFromBrand() {
+    setShowHelp(false)
     setSelectedProjectId(null)
     setSelectedId(null)
   }
@@ -405,10 +416,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
+        <button type="button" className="brand" onClick={goToProjectsFromBrand}>
           <div className="brand-dot" />
           <span>Glank</span>
-        </div>
+        </button>
         <div className="topbar-right">
           {showHelp ? (
             <button className="back-link" onClick={() => setShowHelp(false)}>
@@ -536,6 +547,8 @@ export default function App() {
           setBuildFilter={setBuildFilter}
           whoFilter={whoFilter}
           setWhoFilter={setWhoFilter}
+          assigneeFilter={assigneeFilter}
+          setAssigneeFilter={setAssigneeFilter}
           reportFacets={reportFacets}
         />
       )}

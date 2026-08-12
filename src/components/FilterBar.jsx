@@ -3,8 +3,8 @@ import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS } from '../data/mockBugs.
 
 const TAG_LABELS = Object.fromEntries(TAG_OPTIONS.map((t) => [t.key, t.label]))
 
-// 絞り込みチップに出す「種類」の一覧を組み立てる。
-// プリセット + このプロジェクトが追加した独自項目 + 実際の報告で使われている自由記述の種類を
+// 絞り込みチップに出す「タグ」の一覧を組み立てる。
+// プリセット + このプロジェクトが追加した独自項目 + 実際の報告で使われている自由記述のタグを
 // まとめたうえで、「選択肢の管理」で非表示にしたプリセットだけ除く。
 function buildTagChipOptions(hiddenFieldOptions, customFieldOptions, reportFacets) {
   const hidden = hiddenFieldOptions?.tag ?? []
@@ -31,6 +31,8 @@ export default function FilterBar({
   setBuildFilter,
   whoFilter,
   setWhoFilter,
+  assigneeFilter,
+  setAssigneeFilter,
   reportFacets,
   hiddenFieldOptions,
   customFieldOptions,
@@ -73,6 +75,19 @@ export default function FilterBar({
         ))}
       </select>
 
+      <select
+        className="facet-select"
+        value={assigneeFilter}
+        onChange={(e) => setAssigneeFilter(e.target.value)}
+      >
+        <option value="">対応者: すべて</option>
+        {(reportFacets.assignees ?? []).map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
+
       <div className="chip-group">
         <span className="chip-group-label">対応</span>
         {STATUS_COLUMNS.map((s) => (
@@ -87,7 +102,7 @@ export default function FilterBar({
       </div>
 
       <div className="chip-group">
-        <span className="chip-group-label">種類</span>
+        <span className="chip-group-label">タグ</span>
         {tagChipOptions.map((t) => (
           <button
             key={t.key}

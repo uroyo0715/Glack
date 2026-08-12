@@ -55,7 +55,7 @@ router.get(
   '/reports',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { projectId, status, tag, priority, platform, build, who, q } = req.query
+    const { projectId, status, tag, priority, platform, build, who, assignee, q } = req.query
     if (!projectId) {
       return res.status(400).json({ error: 'projectId is required' })
     }
@@ -73,6 +73,7 @@ router.get(
         platform,
         build,
         who,
+        assignee,
         q,
       })
     )

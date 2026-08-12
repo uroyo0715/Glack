@@ -25,7 +25,9 @@ function setup(overrides = {}) {
     setBuildFilter: vi.fn(),
     whoFilter: '',
     setWhoFilter: vi.fn(),
-    reportFacets: { builds: [], whos: [], tags: [] },
+    assigneeFilter: '',
+    setAssigneeFilter: vi.fn(),
+    reportFacets: { builds: [], whos: [], assignees: [], tags: [] },
     hiddenFieldOptions: { tag: [], priority: [], platform: [] },
     customFieldOptions: { tag: TEST_TAGS, platform: [] },
     resultCount: 9,
@@ -86,6 +88,16 @@ describe('FilterBar', () => {
 
     await user.selectOptions(screen.getByDisplayValue('報告者: すべて'), 'bob')
     expect(props.setWhoFilter).toHaveBeenCalledWith('bob')
+  })
+
+  it('lists 対応者 facet options as a dropdown and calls the setter on change', async () => {
+    const user = userEvent.setup()
+    const props = setup({
+      reportFacets: { builds: [], whos: [], assignees: ['yamada_dev', 'sato_playtest'], tags: [] },
+    })
+
+    await user.selectOptions(screen.getByDisplayValue('対応者: すべて'), 'yamada_dev')
+    expect(props.setAssigneeFilter).toHaveBeenCalledWith('yamada_dev')
   })
 
   it('does not render a chip for a tag hidden via hiddenFieldOptions', () => {

@@ -47,6 +47,8 @@ export default function BugListPage({
   setBuildFilter,
   whoFilter,
   setWhoFilter,
+  assigneeFilter,
+  setAssigneeFilter,
   reportFacets,
 }) {
   const [view, setView] = useState('table') // 'table' | 'kanban'
@@ -178,6 +180,8 @@ export default function BugListPage({
             setBuildFilter={setBuildFilter}
             whoFilter={whoFilter}
             setWhoFilter={setWhoFilter}
+            assigneeFilter={assigneeFilter}
+            setAssigneeFilter={setAssigneeFilter}
             reportFacets={reportFacets}
             hiddenFieldOptions={hiddenFieldOptions}
             customFieldOptions={customFieldOptions}
@@ -195,7 +199,7 @@ export default function BugListPage({
             <div className="bug-table">
               <div className="bug-table-head">
                 <div className="col-title">タイトル</div>
-                <div className="col-tag">種類</div>
+                <div className="col-tag">タグ</div>
                 <div className="col-status">対応状況</div>
                 <div className="col-who">報告者</div>
                 <div className="col-build">ビルド</div>

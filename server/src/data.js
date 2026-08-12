@@ -67,7 +67,10 @@ async function rowToFullBug(client, row) {
 // @libsql/client を受け取る（managedなら共有DB、self_hostedならチーム自前のDB。
 // server/src/projectDataAccess.js の resolveProjectDbClient() で解決する）。
 
-export async function listBugs(client, { projectId, status, tag, priority, platform, build, who, q } = {}) {
+export async function listBugs(
+  client,
+  { projectId, status, tag, priority, platform, build, who, assignee, q } = {}
+) {
   let sql = 'SELECT * FROM bugs WHERE 1=1'
   const args = []
   if (projectId) {
@@ -98,6 +101,10 @@ export async function listBugs(client, { projectId, status, tag, priority, platf
     sql += ' AND who = ?'
     args.push(who)
   }
+  if (assignee) {
+    sql += ' AND assignee = ?'
+    args.push(assignee)
+  }
   if (q) {
     sql += ' AND (LOWER(title) LIKE ? OR LOWER(description) LIKE ?)'
     const needle = `%${String(q).toLowerCase()}%`
@@ -107,17 +114,21 @@ export async function listBugs(client, { projectId, status, tag, priority, platf
   return rows.map(rowToListItem)
 }
 
-/** カンバン/テーブルの絞り込みUI用に、プロジェクト内で実際に使われているビルド・報告者・種類の一覧を返す。
- * tagsは「選択肢の管理」で隠していないプリセットに加え、実際の報告で使われた自由記述の種類も
- * ここに出てくるため、絞り込みチップに新しく付けた種類がすぐ反映される。 */
+/** カンバン/テーブルの絞り込みUI用に、プロジェクト内で実際に使われているビルド・報告者・対応者・タグの一覧を返す。
+ * tagsは「選択肢の管理」で隠していないプリセットに加え、実際の報告で使われた自由記述のタグも
+ * ここに出てくるため、絞り込みチップに新しく付けたタグがすぐ反映される。 */
 export async function listReportFacets(client, projectId) {
-  const [buildsResult, whosResult, tagsResult] = await Promise.all([
+  const [buildsResult, whosResult, assigneesResult, tagsResult] = await Promise.all([
     client.execute({
       sql: "SELECT DISTINCT build FROM bugs WHERE projectId = ? AND build != '' ORDER BY build",
       args: [projectId],
     }),
     client.execute({
       sql: "SELECT DISTINCT who FROM bugs WHERE projectId = ? AND who != '' ORDER BY who",
+      args: [projectId],
+    }),
+    client.execute({
+      sql: "SELECT DISTINCT assignee FROM bugs WHERE projectId = ? AND assignee != '' ORDER BY assignee",
       args: [projectId],
     }),
     client.execute({
@@ -129,6 +140,7 @@ export async function listReportFacets(client, projectId) {
   return {
     builds: buildsResult.rows.map((r) => r.build),
     whos: whosResult.rows.map((r) => r.who),
+    assignees: assigneesResult.rows.map((r) => r.assignee),
     tags: tagsResult.rows.map((r) => r.tag),
   }
 }
