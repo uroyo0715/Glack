@@ -383,21 +383,27 @@ export async function listBugComments(client, bugId) {
 /**
  * バグ報告にコメントを1件追加する。authorEmail/authorDisplayNameは投稿時点のユーザー情報を渡す。
  * parentCommentIdを渡すと、そのコメントへの返信になる（未指定またはnullならトップレベル）。
+ * 返信の返信（2階層以上）は作らず、常にトップレベルのコメントに紐づける
+ * （返信先自体が既に返信なら、その親＝トップレベルのコメントに付け替える。返信は1段までに揃えるため）。
  * @returns {Promise<object | null>} parentCommentIdが同じbugId配下の既存コメントでなければnull
  */
 export async function createBugComment(client, { bugId, authorEmail, authorDisplayName, body, parentCommentId }) {
-  if (parentCommentId != null) {
+  let resolvedParentId = parentCommentId ?? null
+  if (resolvedParentId != null) {
     const { rows: parentRows } = await client.execute({
-      sql: 'SELECT id FROM bugComments WHERE id = ? AND bugId = ?',
-      args: [parentCommentId, bugId],
+      sql: 'SELECT id, parentCommentId FROM bugComments WHERE id = ? AND bugId = ?',
+      args: [resolvedParentId, bugId],
     })
     if (!parentRows[0]) return null
+    if (parentRows[0].parentCommentId != null) {
+      resolvedParentId = Number(parentRows[0].parentCommentId)
+    }
   }
 
   const result = await client.execute({
     sql: `INSERT INTO bugComments (bugId, authorEmail, authorDisplayName, body, createdAt, parentCommentId)
           VALUES (?, ?, ?, ?, datetime('now'), ?)`,
-    args: [bugId, authorEmail, authorDisplayName, body, parentCommentId ?? null],
+    args: [bugId, authorEmail, authorDisplayName, body, resolvedParentId],
   })
   const { rows } = await client.execute({
     sql: 'SELECT * FROM bugComments WHERE id = ?',

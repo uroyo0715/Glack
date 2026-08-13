@@ -726,6 +726,37 @@ test('POST /reports/:id/comments with parentCommentId creates a reply, and rejec
   assert.equal(foreignParent.status, 400)
 })
 
+test('POST /reports/:id/comments replying to a reply collapses to the top-level parent (max depth 1)', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const parent = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: '親コメント' }),
+    })
+  ).json()
+  const reply = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: '返信', parentCommentId: parent.id }),
+    })
+  ).json()
+
+  // 返信(reply)へのさらなる返信は、深く階層化せずreplyの親(=parent)に付け替えられる
+  const replyToReplyRes = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '返信への返信', parentCommentId: reply.id }),
+  })
+  assert.equal(replyToReplyRes.status, 201)
+  const replyToReply = await replyToReplyRes.json()
+  assert.equal(replyToReply.parentCommentId, parent.id) // reply.idではなくparent.idになる
+})
+
 test('DELETE /reports/:id/comments/:commentId only lets the author delete, and cascades to replies', async () => {
   const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
   const created = await (await postReportForm()).json()

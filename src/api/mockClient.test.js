@@ -132,6 +132,18 @@ describe('mockClient reports', () => {
     await expect(client.createReportComment(target.id, 'x', 999999)).rejects.toThrow('unknown parentCommentId')
   })
 
+  it('replying to a reply collapses to the top-level parent (max depth 1)', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const [target] = await client.fetchReports()
+
+    const parent = await client.createReportComment(target.id, '親コメント')
+    const reply = await client.createReportComment(target.id, '返信', parent.id)
+    const replyToReply = await client.createReportComment(target.id, '返信への返信', reply.id)
+
+    expect(replyToReply.parentCommentId).toBe(parent.id) // reply.idではなくparent.idになる
+  })
+
   it('deleteReportComment deletes the comment and cascades to its replies, and rejects unknown ids', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()

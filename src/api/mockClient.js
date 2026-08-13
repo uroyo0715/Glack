@@ -460,7 +460,8 @@ export async function fetchReportComments(id) {
   return comments.filter((c) => String(c.bugId) === String(id))
 }
 
-/** parentCommentIdを渡すと、そのコメントへの返信になる。
+/** parentCommentIdを渡すと、そのコメントへの返信になる。返信の返信は作らず、常に
+ * トップレベルのコメントに付け替える（返信は1段までに揃えるため）。
  * @returns {Promise<import('./types.js').Comment>} */
 export async function createReportComment(id, body, parentCommentId = null) {
   await delay(150)
@@ -469,11 +470,13 @@ export async function createReportComment(id, body, parentCommentId = null) {
   if (!exists) throw new Error(`createReportComment: not found (${id})`)
   const trimmed = (body ?? '').trim()
   if (!trimmed) throw new Error('body cannot be empty')
-  if (parentCommentId != null) {
-    const parentExists = comments.some(
-      (c) => String(c.id) === String(parentCommentId) && String(c.bugId) === String(id)
+  let resolvedParentId = parentCommentId ?? null
+  if (resolvedParentId != null) {
+    const parent = comments.find(
+      (c) => String(c.id) === String(resolvedParentId) && String(c.bugId) === String(id)
     )
-    if (!parentExists) throw new Error('unknown parentCommentId')
+    if (!parent) throw new Error('unknown parentCommentId')
+    if (parent.parentCommentId != null) resolvedParentId = parent.parentCommentId
   }
 
   const comment = {
@@ -483,7 +486,7 @@ export async function createReportComment(id, body, parentCommentId = null) {
     authorDisplayName: currentUser.displayName,
     body: trimmed,
     createdAt: new Date().toISOString(),
-    parentCommentId: parentCommentId ?? null,
+    parentCommentId: resolvedParentId,
   }
   comments = [...comments, comment]
   return comment
