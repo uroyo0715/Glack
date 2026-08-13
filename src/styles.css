@@ -574,17 +574,6 @@ body {
   padding-top: 28px;
   border-top: 3px solid var(--accent-amber);
 }
-.help-storage-section-eyebrow {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--accent-amber);
-  background: color-mix(in srgb, var(--accent-amber) 16%, transparent);
-  border-radius: 4px;
-  padding: 3px 8px;
-  margin-bottom: 10px;
-}
 .help-storage-section h1 {
   font-size: 24px;
   margin: 0 0 12px;
