@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import HelpPage from './HelpPage.jsx'
@@ -8,6 +8,11 @@ describe('HelpPage', () => {
     render(<HelpPage />)
     expect(screen.getByText('2. Unity側にGlank SDKを導入する')).toBeInTheDocument()
     expect(screen.queryByText('2. Godot側にGlank SDKを導入する')).not.toBeInTheDocument()
+  })
+
+  it('hides the SDK download buttons when there is no backend (mock mode)', () => {
+    render(<HelpPage />)
+    expect(screen.queryByText('Unity SDKをダウンロード（zip）')).not.toBeInTheDocument()
   })
 
   it('shows the Godot guide when defaultEngine="godot"', () => {

@@ -11,6 +11,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1108.0",
     "@libsql/client": "^0.17.4",
+    "archiver": "^8.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "google-auth-library": "^11.0.1",

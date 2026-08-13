@@ -1,5 +1,16 @@
 import React, { useState } from 'react'
 import SegmentedToggle from '../components/SegmentedToggle.jsx'
+import { sdkDownloadUrl } from '../api/index.js'
+
+function SdkDownloadButton({ engine, label }) {
+  const url = sdkDownloadUrl(engine)
+  if (!url) return null
+  return (
+    <a className="sdk-download-button" href={url} download>
+      {label}をダウンロード（zip）
+    </a>
+  )
+}
 
 function UnityGuide() {
   return (
@@ -7,28 +18,30 @@ function UnityGuide() {
       <li>
         <h2>1. このWebアプリでプロジェクトを作成する</h2>
         <p>
-          プロジェクト一覧画面の「新規プロジェクト」から、ゲームのタイトルとティザー画像
-          （任意）、使用ゲームエンジン（Unity）を選んで作成します。作成したプロジェクトカードには
-          <span className="mono">ID: 3</span> のようにプロジェクトIDが表示されます。これが
-          Unity側の設定で使う番号です。
+          プロジェクト一覧画面の「新規プロジェクト」から、タイトル・ティザー画像（任意）・
+          使用ゲームエンジン（Unity）を指定して作成します。作成されたプロジェクトカードに表示される
+          <span className="mono">ID: 3</span> のような番号が、Unity側の設定で使うプロジェクトIDです。
         </p>
       </li>
 
       <li>
         <h2>2. Unity側にGlank SDKを導入する</h2>
         <p>
-          リポジトリの <span className="mono">unity-sdk/Glank</span> フォルダを、対象の
-          Unityプロジェクトの <span className="mono">Packages/</span> 以下にコピーします
-          （またはPackage Managerの「Add package from disk...」で
-          <span className="mono">package.json</span> を指定）。外部パッケージへの依存はありません。
+          下のボタンからSDK一式をダウンロードし、展開してできる<span className="mono">Glank</span>
+          フォルダごと、対象UnityプロジェクトのAssetsフォルダ内の
+          <span className="mono">Packages/</span> フォルダの下に置きます。または、Unityの
+          Package Managerで「Add package from disk...」を選び、フォルダ内の
+          <span className="mono">package.json</span> を指定しても導入できます。外部パッケージへの
+          依存はないため、これだけで組み込み完了です。
         </p>
+        <SdkDownloadButton engine="unity" label="Unity SDK" />
       </li>
 
       <li>
         <h2>3. 接続設定（GlankConfig）を作る</h2>
         <p>
           Unityのメニューから <span className="mono">Assets &gt; Create &gt; Glank &gt; Config</span>{' '}
-          でScriptableObjectを作成し、以下を設定します。
+          でScriptableObjectを作成し、次の3項目を設定します。
         </p>
         <table className="help-table">
           <tbody>
@@ -42,8 +55,8 @@ function UnityGuide() {
             <tr>
               <td className="mono">apiKey</td>
               <td>
-                サーバー側の<span className="mono">GLANK_API_KEY</span>
-                環境変数と同じ値。未設定の間は空欄でよい（開発用に認証をスキップする）
+                サーバー側の<span className="mono">GLANK_API_KEY</span>環境変数と同じ値。
+                サーバー側で未設定なら、ここも空欄のままでよい（開発中は認証をスキップできる）
               </td>
             </tr>
             <tr>
@@ -57,12 +70,12 @@ function UnityGuide() {
       <li>
         <h2>4. シーンにコンポーネントを置く</h2>
         <p>
-          任意のGameObjectに <span className="mono">InputLogRecorder</span> と
-          <span className="mono"> BugReportTrigger</span> をアタッチし、
-          <span className="mono">BugReportTrigger</span> の <span className="mono">config</span> に
-          手順3で作った設定を割り当てます。
-          <span className="mono">InputLogRecorder</span> には監視したいキー（
-          <span className="mono">watchedKeys</span>）を登録しておきます。
+          シーン内の任意のGameObjectに <span className="mono">InputLogRecorder</span> と
+          <span className="mono"> BugReportTrigger</span> の2つをアタッチします。
+          <span className="mono">BugReportTrigger</span> の <span className="mono">config</span>{' '}
+          欄に、手順3で作った設定を割り当ててください。
+          <span className="mono">InputLogRecorder</span> の <span className="mono">watchedKeys</span>{' '}
+          には、ログに残したい入力キーを登録します。
         </p>
       </li>
 
@@ -70,20 +83,19 @@ function UnityGuide() {
         <h2>5. 動画の取得方法を選ぶ</h2>
         <p>
           <strong>推奨: </strong>
-          <span className="mono">InstantReplayVideoRecorder</span>{' '}
-          を導入すると、ゲーム自身が直近n秒のプレイをリングバッファで保持し、トリガー時に
-          プラットフォームネイティブのハードウェアエンコーダー経由でmp4として書き出します。
-          プレイヤー側でOSの録画機能を事前に有効化していなくても動画が残るのが利点です。
-          導入手順は<span className="mono">unity-sdk/README.md</span>の「動画録画について」を
-          参照してください。
+          <span className="mono">InstantReplayVideoRecorder</span> を追加すると、ゲーム自身が
+          直近n秒のプレイをリングバッファで保持しておき、バグ報告のタイミングで
+          プラットフォームネイティブのハードウェアエンコーダーでmp4として書き出します。
+          プレイヤーがOSの録画機能を事前に有効化していなくても動画が残るのが利点です。導入手順は
+          <span className="mono">unity-sdk/README.md</span>の「動画録画について」を参照してください。
         </p>
         <p>
-          導入しない場合は、Windowsの<strong>Xbox Game Bar</strong>（背景録画）や
+          これを追加しない場合でも、Windowsの<strong>Xbox Game Bar</strong>（背景録画）や
           <strong>NVIDIA ShadowPlay</strong>、<strong>AMD ReLive</strong>
-          といったOS標準のインスタントリプレイ機能に録画を任せる
+          といったOS標準のインスタントリプレイ機能を利用する
           <span className="mono">ReplayFolderWatcher</span>
-          がフォールバックとして標準で組み込まれています（追加コード不要）。この場合、
-          プレイヤーは事前にOS側の録画機能を有効にしておく必要があります。
+          がフォールバックとして標準で組み込まれており、追加コードは不要です。ただしこの場合、
+          プレイヤー側で事前にOSの録画機能を有効にしておく必要があります。
         </p>
       </li>
 
@@ -91,15 +103,14 @@ function UnityGuide() {
         <h2>6. バグを見つけたらホットキーを押す</h2>
         <p>
           <span className="mono">BugReportTrigger</span>のホットキー（既定は
-          <span className="mono"> F12</span>）を押すと、直近の入力ログと動画がまとめて送信され、
-          このWebアプリのプロジェクト内バグ一覧に「未対応」として現れます
-          （<span className="mono">ReplayFolderWatcher</span>のみを使う場合は、先に
-          <span className="mono">Win + Alt + G</span>でOS側に直近の録画を保存してからホットキーを
-          押してください）。
+          <span className="mono"> F12</span>）を押すと、直近の入力ログと動画がまとめて自動送信され、
+          このWebアプリのプロジェクト内バグ一覧に「未対応」として表示されます。
+          <span className="mono">ReplayFolderWatcher</span>のみを使っている場合は、ホットキーを押す前に
+          <span className="mono">Win + Alt + G</span>を押してOS側に直近の録画を保存しておいてください。
         </p>
         <p>
-          タイトルやタグをQA担当者に入力させたい場合は、
-          <span className="mono">GlankReportPromptUI</span>を使うと、ホットキーで即送信する代わりに
+          タイトルやタグをQA担当者に入力させてから送信したい場合は、
+          <span className="mono">GlankReportPromptUI</span>を使うと、ホットキー即送信の代わりに
           簡易フォームを開けます。
         </p>
       </li>
@@ -113,28 +124,29 @@ function GodotGuide() {
       <li>
         <h2>1. このWebアプリでプロジェクトを作成する</h2>
         <p>
-          プロジェクト一覧画面の「新規プロジェクト」から、ゲームのタイトルとティザー画像
-          （任意）、使用ゲームエンジン（Godot）を選んで作成します。作成したプロジェクトカードには
-          <span className="mono">ID: 3</span> のようにプロジェクトIDが表示されます。これが
-          Godot側の設定で使う番号です。
+          プロジェクト一覧画面の「新規プロジェクト」から、タイトル・ティザー画像（任意）・
+          使用ゲームエンジン（Godot）を指定して作成します。作成されたプロジェクトカードに表示される
+          <span className="mono">ID: 3</span> のような番号が、Godot側の設定で使うプロジェクトIDです。
         </p>
       </li>
 
       <li>
         <h2>2. Godot側にGlank SDKを導入する</h2>
         <p>
-          リポジトリの <span className="mono">godot-sdk/addons/glank</span> フォルダを、対象の
-          Godotプロジェクトの <span className="mono">addons/glank</span> にコピーします。
-          Godotエディタで <span className="mono">プロジェクト &gt; プロジェクト設定 &gt; プラグイン</span>{' '}
-          から「Glank Bug Report SDK」を有効化してください（Godot 4系を想定）。
+          下のボタンからSDK一式をダウンロードし、展開してできる<span className="mono">glank</span>
+          フォルダごと、対象Godotプロジェクトの<span className="mono">addons/glank</span>
+          に置きます。続けてGodotエディタで
+          <span className="mono">プロジェクト &gt; プロジェクト設定 &gt; プラグイン</span>{' '}
+          を開き、「Glank Bug Report SDK」を有効化してください（Godot 4系を想定）。
         </p>
+        <SdkDownloadButton engine="godot" label="Godot SDK" />
       </li>
 
       <li>
         <h2>3. 接続設定（GlankConfig）を作る</h2>
         <p>
           FileSystemドックを右クリック &gt; <span className="mono">New Resource &gt; GlankConfig</span>{' '}
-          でリソースを作成し、以下を設定します。
+          でリソースを作成し、次の3項目を設定します。
         </p>
         <table className="help-table">
           <tbody>
@@ -148,8 +160,8 @@ function GodotGuide() {
             <tr>
               <td className="mono">api_key</td>
               <td>
-                サーバー側の<span className="mono">GLANK_API_KEY</span>
-                環境変数と同じ値。未設定の間は空欄でよい（開発用に認証をスキップする）
+                サーバー側の<span className="mono">GLANK_API_KEY</span>環境変数と同じ値。
+                サーバー側で未設定なら、ここも空欄のままでよい（開発中は認証をスキップできる）
               </td>
             </tr>
             <tr>
@@ -163,41 +175,42 @@ function GodotGuide() {
       <li>
         <h2>4. シーンにNodeを置く</h2>
         <p>
-          任意のNodeに <span className="mono">InputLogRecorder</span> と
-          <span className="mono"> BugReportTrigger</span> をアタッチし、
-          <span className="mono">BugReportTrigger</span> の <span className="mono">config</span> に
-          手順3で作った設定を割り当てます。
-          <span className="mono">InputLogRecorder</span> には監視したいキー（
-          <span className="mono">watched_keys</span>、<span className="mono">GlankWatchedKey</span>
-          リソースの配列）を登録しておきます。
+          シーン内の任意のNodeに <span className="mono">InputLogRecorder</span> と
+          <span className="mono"> BugReportTrigger</span> の2つをアタッチします。
+          <span className="mono">BugReportTrigger</span> の <span className="mono">config</span>{' '}
+          欄に、手順3で作った設定を割り当ててください。
+          <span className="mono">InputLogRecorder</span> の <span className="mono">watched_keys</span>
+          （<span className="mono">GlankWatchedKey</span>リソースの配列）には、ログに残したい
+          入力キーを登録します。
         </p>
       </li>
 
       <li>
         <h2>5. 動画はOSのインスタントリプレイ機能に任せる</h2>
         <p>
-          GodotにはUnity版の<span className="mono">InstantReplayVideoRecorder</span>に相当する、
-          自前でリングバッファ録画をmp4に書き出せる信頼できるOSSが見当たらなかったため、
-          Godot版は現状<span className="mono">ReplayFolderWatcher</span>
+          Unity版が使っている<span className="mono">InstantReplayVideoRecorder</span>（自前で
+          リングバッファ録画をmp4に書き出す仕組み）に相当する、信頼できるOSSがGodotでは
+          見つからなかったため、Godot版は<span className="mono">ReplayFolderWatcher</span>
           （Windowsの<strong>Xbox Game Bar</strong>や<strong>NVIDIA ShadowPlay</strong>、
           <strong>AMD ReLive</strong>といったOS標準のインスタントリプレイ機能の出力フォルダを
-          検出する仕組み）のみを提供します。プレイヤーは事前にOS側の録画機能を有効にしておく
-          必要があります。詳細は<span className="mono">godot-sdk/README.md</span>を参照してください。
+          監視する仕組み）のみを提供します。そのため、プレイヤー側で事前にOSの録画機能を
+          有効にしておく必要があります。詳細は
+          <span className="mono">godot-sdk/README.md</span>を参照してください。
         </p>
       </li>
 
       <li>
         <h2>6. バグを見つけたら2つのキーを押す</h2>
         <p>
-          まず <span className="mono">Win + Alt + G</span>{' '}
-          でOS側に直近の録画を保存させ、続けて<span className="mono">BugReportTrigger</span>の
-          ホットキー（既定は<span className="mono"> F12</span>）を押します。直近の入力ログと、
-          いま保存された録画動画がまとめて送信され、このWebアプリのプロジェクト内バグ一覧に
-          「未対応」として現れます。
+          まず <span className="mono">Win + Alt + G</span> を押してOS側に直近の録画を保存させ、
+          続けて<span className="mono">BugReportTrigger</span>のホットキー（既定は
+          <span className="mono"> F12</span>）を押します。直近の入力ログと、いま保存された
+          録画動画がまとめて自動送信され、このWebアプリのプロジェクト内バグ一覧に「未対応」として
+          表示されます。
         </p>
         <p>
-          タイトルやタグをQA担当者に入力させたい場合は、
-          <span className="mono">GlankReportPromptUI</span>を使うと、ホットキーで即送信する代わりに
+          タイトルやタグをQA担当者に入力させてから送信したい場合は、
+          <span className="mono">GlankReportPromptUI</span>を使うと、ホットキー即送信の代わりに
           簡易フォームを開けます。
         </p>
       </li>

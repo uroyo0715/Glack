@@ -1,5 +1,11 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
 
+/** SDKフォルダ(zip)のダウンロードURL。engineは'unity' | 'godot'。
+ * @returns {string} */
+export function sdkDownloadUrl(engine) {
+  return `${BASE_URL}/sdk/${engine}`
+}
+
 /** @returns {Promise<{id: number, name: string, imageUrl: string | null, bugCount: number}[]>} */
 export async function fetchProjects() {
   const res = await fetch(`${BASE_URL}/projects`, { credentials: 'include' })

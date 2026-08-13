@@ -6,6 +6,11 @@ const PRIORITY_KEYS = new Set(PRIORITY_OPTIONS.map((p) => p.key))
 // 種類（tag）はプリセット以外の自由記述も許可する（サーバーのresolveTagLabelと同じ挙動）
 const resolveTagLabel = (tag) => TAG_LABELS[tag] ?? tag
 
+// モックモードには実体のバックエンドが無いためダウンロードできない
+export function sdkDownloadUrl() {
+  return null
+}
+
 // バックエンド未接続時に client.js と同じインターフェースを提供するダミー実装
 let bugs = seedBugs.map((b) => ({ ...b }))
 let projects = seedProjects.map((p) => ({ ...p }))

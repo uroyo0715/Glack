@@ -552,6 +552,23 @@ body {
   font-size: 12px;
   overflow-x: auto;
 }
+.sdk-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.sdk-download-button:hover {
+  border-color: var(--accent-amber);
+}
 .help-footer-note {
   margin-top: 30px;
   font-size: 12px;
