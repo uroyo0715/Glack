@@ -496,6 +496,7 @@ body {
 .help-page {
   padding: 26px 34px;
   max-width: 760px;
+  margin: 0 auto;
 }
 .help-lead {
   font-size: 14px;
