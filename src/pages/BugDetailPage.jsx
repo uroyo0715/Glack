@@ -251,6 +251,7 @@ export default function BugDetailPage({
             <div className={`detail-columns ${logLayout === 'below' ? 'stacked' : ''}`}>
               <div className="detail-col-video">
                 <VideoPlayer
+                  videoUrl={bug.videoUrl}
                   duration={duration}
                   elapsed={elapsed}
                   setElapsed={setElapsed}
