@@ -15,6 +15,7 @@ import {
   PRIORITY_LABELS,
   listBugComments,
   createBugComment,
+  deleteBugComment,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveVideo, deleteFile } from '../storage.js'
@@ -152,13 +153,45 @@ router.post(
     const bug = await getBugById(resolved.client, id)
     if (!bug) return res.status(404).json({ error: 'not found' })
 
+    const parentCommentId = req.body?.parentCommentId != null ? Number(req.body.parentCommentId) : null
+
     const comment = await createBugComment(resolved.client, {
       bugId: id,
       authorEmail: req.user.email,
       authorDisplayName: req.user.displayName,
       body,
+      parentCommentId,
     })
+    if (!comment) {
+      return res.status(400).json({ error: 'unknown parentCommentId' })
+    }
     res.status(201).json(comment)
+  })
+)
+
+router.delete(
+  '/reports/:id/comments/:commentId',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id)
+    const commentId = Number(req.params.commentId)
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+
+    const result = await deleteBugComment(resolved.client, {
+      bugId: id,
+      commentId,
+      requesterEmail: req.user.email,
+    })
+    if (result === 'not_found') return res.status(404).json({ error: 'not found' })
+    if (result === 'forbidden') {
+      return res.status(403).json({ error: 'only the comment author can delete it' })
+    }
+    res.json({ deleted: true })
   })
 )
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
+import { addProjectMembers } from '../src/data.js'
 
 const PROJECT_OWNER_EMAIL = 'reports-owner@example.com'
 let project
@@ -677,4 +678,106 @@ test('DELETE /reports/:id also removes its comments', async () => {
 
   const after = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, { headers: { Cookie: owner.cookie } })
   assert.equal(after.status, 404) // 報告自体が無いので404（bugIndexも消えているため）
+})
+
+test('POST /reports/:id/comments with parentCommentId creates a reply, and rejects an unknown/foreign parent', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const parent = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: '親コメント' }),
+    })
+  ).json()
+
+  const replyRes = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '返信です', parentCommentId: parent.id }),
+  })
+  assert.equal(replyRes.status, 201)
+  const reply = await replyRes.json()
+  assert.equal(reply.parentCommentId, parent.id)
+
+  const list = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, { headers: { Cookie: owner.cookie } })
+  ).json()
+  assert.equal(list.find((c) => c.id === parent.id).parentCommentId, null)
+  assert.equal(list.find((c) => c.id === reply.id).parentCommentId, parent.id)
+
+  const unknownParent = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'x', parentCommentId: 999999 }),
+  })
+  assert.equal(unknownParent.status, 400)
+
+  // 別の報告に属するコメントIDを親に指定しても拒否される
+  const otherReport = await (await postReportForm()).json()
+  uploadedFiles.push(otherReport.videoUrl)
+  const foreignParent = await fetch(`${getBaseUrl()}/reports/${otherReport.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'x', parentCommentId: parent.id }),
+  })
+  assert.equal(foreignParent.status, 400)
+})
+
+test('DELETE /reports/:id/comments/:commentId only lets the author delete, and cascades to replies', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const parent = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: '親コメント' }),
+    })
+  ).json()
+  const reply = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: '返信', parentCommentId: parent.id }),
+    })
+  ).json()
+
+  // 同じプロジェクトの別メンバー（コメント投稿者本人ではない）は削除できない
+  const teammate = await createAuthCookie()
+  await addProjectMembers(project.id, [teammate.user.email])
+  const teammateDelete = await fetch(
+    `${getBaseUrl()}/reports/${created.id}/comments/${parent.id}`,
+    { method: 'DELETE', headers: { Cookie: teammate.cookie } }
+  )
+  assert.equal(teammateDelete.status, 403)
+
+  const nonMember = await createAuthCookie()
+  const nonMemberDelete = await fetch(
+    `${getBaseUrl()}/reports/${created.id}/comments/${parent.id}`,
+    { method: 'DELETE', headers: { Cookie: nonMember.cookie } }
+  )
+  assert.equal(nonMemberDelete.status, 404)
+
+  const ownerDelete = await fetch(
+    `${getBaseUrl()}/reports/${created.id}/comments/${parent.id}`,
+    { method: 'DELETE', headers: { Cookie: owner.cookie } }
+  )
+  assert.equal(ownerDelete.status, 200)
+  assert.deepEqual(await ownerDelete.json(), { deleted: true })
+
+  const list = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, { headers: { Cookie: owner.cookie } })
+  ).json()
+  assert.equal(list.find((c) => c.id === parent.id), undefined)
+  assert.equal(list.find((c) => c.id === reply.id), undefined) // 返信も連動して削除される
+
+  const unknown = await fetch(
+    `${getBaseUrl()}/reports/${created.id}/comments/999999`,
+    { method: 'DELETE', headers: { Cookie: owner.cookie } }
+  )
+  assert.equal(unknown.status, 404)
 })

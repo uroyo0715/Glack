@@ -30,6 +30,7 @@ export const {
   attachReportVideo,
   fetchReportComments,
   createReportComment,
+  deleteReportComment,
   loginWithGoogle,
   logout,
   me,

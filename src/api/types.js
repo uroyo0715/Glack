@@ -43,6 +43,7 @@
  * @property {string} authorDisplayName - 投稿時点の表示名のスナップショット
  * @property {string} body
  * @property {string} createdAt
+ * @property {number | null} parentCommentId - 特定のコメントへの返信の場合、その親コメントのid
  */
 
 export {}

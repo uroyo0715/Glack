@@ -61,13 +61,15 @@ export const BUG_TABLES_SCHEMA = `
   -- バグ報告内のコメント（スレッド）。authorEmail/authorDisplayNameは投稿時点の値を
   -- そのまま保存する（usersテーブルはコントロールプレーンDB側にあり、self_hostedプロジェクトの
   -- 別DBからは参照できないため、JOINせずに済むようスナップショットで持つ。bugs.whoと同じ考え方）。
+  -- parentCommentId: 特定のコメントへの返信の場合、その親コメントのid（トップレベルはNULL）。
   CREATE TABLE IF NOT EXISTS bugComments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     bugId INTEGER NOT NULL REFERENCES bugs(id),
     authorEmail TEXT NOT NULL,
     authorDisplayName TEXT NOT NULL,
     body TEXT NOT NULL,
-    createdAt TEXT NOT NULL
+    createdAt TEXT NOT NULL,
+    parentCommentId INTEGER REFERENCES bugComments(id)
   );
 `
 
@@ -269,7 +271,16 @@ export async function migrateAddAssigneeIfNeeded(client) {
   await client.execute("ALTER TABLE bugs ADD COLUMN assignee TEXT NOT NULL DEFAULT ''")
 }
 
+// マイグレーション: コメントへの返信(parentCommentId)導入前に作られたbugCommentsには存在しないため追加する。
+export async function migrateAddParentCommentIdIfNeeded(client) {
+  const { rows: columns } = await client.execute('PRAGMA table_info(bugComments)')
+  const hasParentCommentId = columns.some((c) => c.name === 'parentCommentId')
+  if (hasParentCommentId) return
+  await client.execute('ALTER TABLE bugComments ADD COLUMN parentCommentId INTEGER REFERENCES bugComments(id)')
+}
+
 await migrateAddAssigneeIfNeeded(db)
+await migrateAddParentCommentIdIfNeeded(db)
 
 // マイグレーション: プロジェクト機能導入前に作られたDBには bugs.projectId が存在しない。
 // 既存データを失わないよう、ALTER TABLEで列を追加し、初期プロジェクトへ割り当てる。

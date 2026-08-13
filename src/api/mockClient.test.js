@@ -116,6 +116,40 @@ describe('mockClient reports', () => {
     await expect(client.createReportComment(999999, 'hi')).rejects.toThrow('not found')
   })
 
+  it('createReportComment with a parentCommentId creates a reply, and rejects an unknown parent', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const [target] = await client.fetchReports()
+
+    const parent = await client.createReportComment(target.id, '親コメント')
+    const reply = await client.createReportComment(target.id, '返信です', parent.id)
+    expect(reply.parentCommentId).toBe(parent.id)
+
+    const comments = await client.fetchReportComments(target.id)
+    expect(comments.find((c) => c.id === parent.id).parentCommentId).toBeNull()
+    expect(comments.find((c) => c.id === reply.id).parentCommentId).toBe(parent.id)
+
+    await expect(client.createReportComment(target.id, 'x', 999999)).rejects.toThrow('unknown parentCommentId')
+  })
+
+  it('deleteReportComment deletes the comment and cascades to its replies, and rejects unknown ids', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const [target] = await client.fetchReports()
+
+    const parent = await client.createReportComment(target.id, '親コメント')
+    const reply = await client.createReportComment(target.id, '返信', parent.id)
+
+    await expect(client.deleteReportComment(target.id, 999999)).rejects.toThrow('not found')
+
+    const result = await client.deleteReportComment(target.id, parent.id)
+    expect(result).toEqual({ deleted: true })
+
+    const comments = await client.fetchReportComments(target.id)
+    expect(comments.find((c) => c.id === parent.id)).toBeUndefined()
+    expect(comments.find((c) => c.id === reply.id)).toBeUndefined() // 返信も連動削除
+  })
+
   it('attachReportVideo sets videoUrl/fps/durationFrames on a report created with no video', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()

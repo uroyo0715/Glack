@@ -41,6 +41,8 @@ export default function BugDetailPage({
   onDeleteReport,
   onFetchComments,
   onCreateComment,
+  onDeleteComment,
+  currentUserEmail,
 }) {
   const [elapsed, setElapsed] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -303,7 +305,13 @@ export default function BugDetailPage({
           </div>
         )}
 
-        <CommentThread bugId={bug.id} onFetchComments={onFetchComments} onCreateComment={onCreateComment} />
+        <CommentThread
+          bugId={bug.id}
+          currentUserEmail={currentUserEmail}
+          onFetchComments={onFetchComments}
+          onCreateComment={onCreateComment}
+          onDeleteComment={onDeleteComment}
+        />
 
         <div
           className="detail-resize-handle"

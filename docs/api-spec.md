@@ -336,7 +336,8 @@ Response: `200 OK`、`{ "deleted": true }`。取り消せない操作のため�
 権限は他の`/reports/:id`系と同様、ログイン済みのプロジェクトメンバーであれば誰でも閲覧・投稿可。
 非メンバー・未ログイン・存在しないidはいずれも`404`（未ログインのみ`401`）。
 
-- `GET /reports/:id/comments` — 投稿順（古い順）のコメント一覧を返す。
+- `GET /reports/:id/comments` — 投稿順（古い順）のフラットな配列を返す。`parentCommentId`で
+  返信関係が分かる（ツリーへの組み立てはフロント側で行う）。
   ```ts
   interface Comment {
     id: number
@@ -345,10 +346,16 @@ Response: `200 OK`、`{ "deleted": true }`。取り消せない操作のため�
     authorDisplayName: string // 投稿時点の表示名のスナップショット（後で改名しても過去コメントの表示は変わらない）
     body: string
     createdAt: string
+    parentCommentId: number | null // 特定のコメントへの返信の場合、その親コメントのid。トップレベルはnull
   }
   ```
-- `POST /reports/:id/comments` — body: `{ body: string }`（空文字は`400`）。`authorEmail`/
-  `authorDisplayName`はセッションのユーザー情報から自動的に付与される。`201 Created`、作成された`Comment`。
+- `POST /reports/:id/comments` — body: `{ body: string, parentCommentId?: number }`。
+  `body`が空文字は`400`。`parentCommentId`を渡すとそのコメントへの返信になる（同じ報告内の
+  既存コメントでなければ`400`）。`authorEmail`/`authorDisplayName`はセッションのユーザー情報から
+  自動的に付与される。`201 Created`、作成された`Comment`。
+- `DELETE /reports/:id/comments/:commentId` — コメントを削除する。**投稿者本人のみ**削除可能
+  （それ以外は`403`）。削除すると、そのコメントへの返信も再帰的にまとめて削除される。
+  非メンバー・存在しないcommentIdは`404`。Response: `{ "deleted": true }`。
 
 報告自体を削除（`DELETE /reports/:id`）すると、紐づくコメントもまとめて削除される。
 

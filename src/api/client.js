@@ -313,15 +313,26 @@ export async function fetchReportComments(id) {
   return res.json()
 }
 
-/** @returns {Promise<import('./types.js').Comment>} */
-export async function createReportComment(id, body) {
+/** parentCommentIdを渡すと、そのコメントへの返信になる。
+ * @returns {Promise<import('./types.js').Comment>} */
+export async function createReportComment(id, body, parentCommentId = null) {
   const res = await fetch(`${BASE_URL}/reports/${id}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, parentCommentId }),
   })
   if (!res.ok) await throwApiError(res, `createReportComment failed: ${res.status}`)
+  return res.json()
+}
+
+/** コメントを削除する（投稿者本人のみ）。返信も連動して削除される。 */
+export async function deleteReportComment(id, commentId) {
+  const res = await fetch(`${BASE_URL}/reports/${id}/comments/${commentId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  if (!res.ok) await throwApiError(res, `deleteReportComment failed: ${res.status}`)
   return res.json()
 }
 

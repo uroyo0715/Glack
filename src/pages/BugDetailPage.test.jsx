@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BugDetailPage from './BugDetailPage.jsx'
 
@@ -41,7 +41,10 @@ function renderPage(overrides = {}) {
       authorDisplayName: 'デモユーザー',
       body: 'コメント本文',
       createdAt: '2026-08-13T00:00:00Z',
+      parentCommentId: null,
     }),
+    onDeleteComment: vi.fn().mockResolvedValue({ deleted: true }),
+    currentUserEmail: 'demo@example.com',
     ...overrides,
   }
   render(<BugDetailPage {...props} />)
@@ -122,5 +125,81 @@ describe('BugDetailPage - comment thread', () => {
     await user.click(screen.getByRole('button', { name: '投稿' }))
 
     expect(await screen.findByText('コメントの投稿に失敗しました')).toBeInTheDocument()
+  })
+
+  it('lets the user reply to a comment, nesting it under the parent', async () => {
+    const user = userEvent.setup()
+    const onCreateComment = vi.fn().mockResolvedValue({
+      id: 2,
+      bugId: 1,
+      authorEmail: 'demo@example.com',
+      authorDisplayName: 'デモユーザー',
+      body: '返信です',
+      createdAt: '2026-08-13T00:01:00Z',
+      parentCommentId: 1,
+    })
+    const props = renderPage({
+      onFetchComments: vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          bugId: 1,
+          authorEmail: 'other@example.com',
+          authorDisplayName: '他のユーザー',
+          body: '親コメント',
+          createdAt: '2026-08-13T00:00:00Z',
+          parentCommentId: null,
+        },
+      ]),
+      onCreateComment,
+    })
+
+    await screen.findByText('親コメント')
+    await user.click(screen.getByRole('button', { name: '返信' }))
+    await user.type(screen.getByPlaceholderText('返信を入力...'), '返信です')
+    await user.click(screen.getByRole('button', { name: '返信する' }))
+
+    expect(onCreateComment).toHaveBeenCalledWith(1, '返信です', 1)
+    expect(await screen.findByText('返信です')).toBeInTheDocument()
+  })
+
+  it('only shows a delete button for the current user’s own comments, and removes it after confirming', async () => {
+    const user = userEvent.setup()
+    const onDeleteComment = vi.fn().mockResolvedValue({ deleted: true })
+    renderPage({
+      onFetchComments: vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          bugId: 1,
+          authorEmail: 'other@example.com',
+          authorDisplayName: '他のユーザー',
+          body: '他人のコメント',
+          createdAt: '2026-08-13T00:00:00Z',
+          parentCommentId: null,
+        },
+        {
+          id: 2,
+          bugId: 1,
+          authorEmail: 'demo@example.com',
+          authorDisplayName: 'デモユーザー',
+          body: '自分のコメント',
+          createdAt: '2026-08-13T00:01:00Z',
+          parentCommentId: null,
+        },
+      ]),
+      onDeleteComment,
+      currentUserEmail: 'demo@example.com',
+    })
+
+    await screen.findByText('他人のコメント')
+    const commentThread = document.querySelector('.comment-thread')
+    const deleteButtons = within(commentThread).getAllByRole('button', { name: '削除' })
+    expect(deleteButtons).toHaveLength(1) // 自分のコメントの分だけ
+
+    await user.click(deleteButtons[0])
+    await user.click(screen.getByRole('button', { name: '削除する' }))
+
+    expect(onDeleteComment).toHaveBeenCalledWith(1, 2)
+    await screen.findByText('他人のコメント')
+    expect(screen.queryByText('自分のコメント')).not.toBeInTheDocument()
   })
 })

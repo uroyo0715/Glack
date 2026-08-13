@@ -11,7 +11,7 @@ let bugs = seedBugs.map((b) => ({ ...b }))
 let projects = seedProjects.map((p) => ({ ...p }))
 let nextProjectId = projects.length + 1
 let nextBugId = Math.max(0, ...bugs.map((b) => b.id)) + 1
-let comments = [] // { id, bugId, authorEmail, authorDisplayName, body, createdAt }
+let comments = [] // { id, bugId, authorEmail, authorDisplayName, body, createdAt, parentCommentId }
 let nextCommentId = 1
 // projectId -> {email, displayName}[]。モックはユーザーが1人しかいないため実際のアクセス制御はしないが、
 // メンバー一覧UIの動作確認はできるようにしておく。招待されただけのメンバーはdisplayName: null
@@ -460,14 +460,21 @@ export async function fetchReportComments(id) {
   return comments.filter((c) => String(c.bugId) === String(id))
 }
 
-/** @returns {Promise<import('./types.js').Comment>} */
-export async function createReportComment(id, body) {
+/** parentCommentIdを渡すと、そのコメントへの返信になる。
+ * @returns {Promise<import('./types.js').Comment>} */
+export async function createReportComment(id, body, parentCommentId = null) {
   await delay(150)
   requireLogin()
   const exists = bugs.some((b) => String(b.id) === String(id))
   if (!exists) throw new Error(`createReportComment: not found (${id})`)
   const trimmed = (body ?? '').trim()
   if (!trimmed) throw new Error('body cannot be empty')
+  if (parentCommentId != null) {
+    const parentExists = comments.some(
+      (c) => String(c.id) === String(parentCommentId) && String(c.bugId) === String(id)
+    )
+    if (!parentExists) throw new Error('unknown parentCommentId')
+  }
 
   const comment = {
     id: nextCommentId++,
@@ -476,7 +483,31 @@ export async function createReportComment(id, body) {
     authorDisplayName: currentUser.displayName,
     body: trimmed,
     createdAt: new Date().toISOString(),
+    parentCommentId: parentCommentId ?? null,
   }
   comments = [...comments, comment]
   return comment
+}
+
+/** コメントを削除する（投稿者本人のみ）。返信も連動して削除される。 */
+export async function deleteReportComment(id, commentId) {
+  await delay(150)
+  requireLogin()
+  const target = comments.find((c) => String(c.id) === String(commentId) && String(c.bugId) === String(id))
+  if (!target) throw new Error('not found')
+  if (target.authorEmail !== currentUser.email) throw new Error('only the comment author can delete it')
+
+  const toRemove = new Set([target.id])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const c of comments) {
+      if (c.parentCommentId != null && toRemove.has(c.parentCommentId) && !toRemove.has(c.id)) {
+        toRemove.add(c.id)
+        changed = true
+      }
+    }
+  }
+  comments = comments.filter((c) => !toRemove.has(c.id))
+  return { deleted: true }
 }

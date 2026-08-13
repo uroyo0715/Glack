@@ -1472,6 +1472,32 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.comment-item-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+.comment-item-action {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.comment-item-action:hover {
+  color: var(--text);
+}
+.comment-item-action-danger {
+  color: var(--error, #d9534f);
+}
+.comment-item-action-danger:hover {
+  color: var(--error, #d9534f);
+}
+.comment-reply-form {
+  margin-top: 8px;
+}
 .comment-form {
   display: flex;
   flex-direction: column;
@@ -1490,6 +1516,7 @@ body {
 .comment-form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 .comment-form-actions button {
   padding: 7px 16px;
@@ -1505,6 +1532,11 @@ body {
 .comment-form-actions button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.comment-form-actions .comment-form-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
 }
 
 /* ---- Detail page ---- */

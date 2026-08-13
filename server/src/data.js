@@ -367,10 +367,11 @@ function rowToComment(row) {
     authorDisplayName: row.authorDisplayName,
     body: row.body,
     createdAt: row.createdAt,
+    parentCommentId: row.parentCommentId == null ? null : Number(row.parentCommentId),
   }
 }
 
-/** バグ報告のコメント一覧を投稿順に返す。 */
+/** バグ報告のコメント一覧を投稿順に返す（フラットな配列。parentCommentIdで返信関係が分かる。ツリー化はフロント側で行う）。 */
 export async function listBugComments(client, bugId) {
   const { rows } = await client.execute({
     sql: 'SELECT * FROM bugComments WHERE bugId = ? ORDER BY id ASC',
@@ -379,18 +380,56 @@ export async function listBugComments(client, bugId) {
   return rows.map(rowToComment)
 }
 
-/** バグ報告にコメントを1件追加する。authorEmail/authorDisplayNameは投稿時点のユーザー情報を渡す。 */
-export async function createBugComment(client, { bugId, authorEmail, authorDisplayName, body }) {
+/**
+ * バグ報告にコメントを1件追加する。authorEmail/authorDisplayNameは投稿時点のユーザー情報を渡す。
+ * parentCommentIdを渡すと、そのコメントへの返信になる（未指定またはnullならトップレベル）。
+ * @returns {Promise<object | null>} parentCommentIdが同じbugId配下の既存コメントでなければnull
+ */
+export async function createBugComment(client, { bugId, authorEmail, authorDisplayName, body, parentCommentId }) {
+  if (parentCommentId != null) {
+    const { rows: parentRows } = await client.execute({
+      sql: 'SELECT id FROM bugComments WHERE id = ? AND bugId = ?',
+      args: [parentCommentId, bugId],
+    })
+    if (!parentRows[0]) return null
+  }
+
   const result = await client.execute({
-    sql: `INSERT INTO bugComments (bugId, authorEmail, authorDisplayName, body, createdAt)
-          VALUES (?, ?, ?, ?, datetime('now'))`,
-    args: [bugId, authorEmail, authorDisplayName, body],
+    sql: `INSERT INTO bugComments (bugId, authorEmail, authorDisplayName, body, createdAt, parentCommentId)
+          VALUES (?, ?, ?, ?, datetime('now'), ?)`,
+    args: [bugId, authorEmail, authorDisplayName, body, parentCommentId ?? null],
   })
   const { rows } = await client.execute({
     sql: 'SELECT * FROM bugComments WHERE id = ?',
     args: [result.lastInsertRowid],
   })
   return rowToComment(rows[0])
+}
+
+/**
+ * バグ報告のコメントを1件削除する（そのコメントへの返信も再帰的にまとめて削除する）。
+ * 投稿者本人以外は削除できない。
+ * @returns {Promise<'deleted' | 'not_found' | 'forbidden'>}
+ */
+export async function deleteBugComment(client, { bugId, commentId, requesterEmail }) {
+  const { rows } = await client.execute({
+    sql: 'SELECT authorEmail FROM bugComments WHERE id = ? AND bugId = ?',
+    args: [commentId, bugId],
+  })
+  if (!rows[0]) return 'not_found'
+  if (rows[0].authorEmail !== requesterEmail) return 'forbidden'
+
+  await client.execute({
+    sql: `WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM bugComments WHERE id = ?
+            UNION ALL
+            SELECT bugComments.id FROM bugComments
+            JOIN descendants ON bugComments.parentCommentId = descendants.id
+          )
+          DELETE FROM bugComments WHERE id IN (SELECT id FROM descendants)`,
+    args: [commentId],
+  })
+  return 'deleted'
 }
 
 // --- プロジェクト・ユーザー・セッション（コントロールプレーン）。常にGlank自前のdb（db.js）を使う。
