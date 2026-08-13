@@ -605,7 +605,8 @@ export async function removeProjectCustomOption(id, field, value) {
   return getProjectById(id)
 }
 
-/** 将来の課金判定用フラグ。今は決済機能がないため手動で切り替える（server/scripts/set-managed-allowed.mjs）。 */
+/** managed利用を個別に制限したい場合の手動フラグ（新規プロジェクトは既定でtrue）。
+ * 決済機能はまだ無いため手動で切り替える（server/scripts/set-managed-allowed.mjs）。 */
 export async function setProjectManagedAllowed(id, allowed) {
   await db.execute({
     sql: 'UPDATE projects SET isManagedAllowed = ? WHERE id = ?',
