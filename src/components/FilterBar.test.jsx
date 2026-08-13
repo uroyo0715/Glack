@@ -83,10 +83,10 @@ describe('FilterBar', () => {
     const user = userEvent.setup()
     const props = setup({ reportFacets: { builds: ['0.1.0', '0.2.0'], whos: ['alice', 'bob'], tags: [] } })
 
-    await user.selectOptions(screen.getByDisplayValue('ビルド: すべて'), '0.2.0')
+    await user.selectOptions(screen.getByLabelText('ビルド:'), '0.2.0')
     expect(props.setBuildFilter).toHaveBeenCalledWith('0.2.0')
 
-    await user.selectOptions(screen.getByDisplayValue('報告者: すべて'), 'bob')
+    await user.selectOptions(screen.getByLabelText('報告者:'), 'bob')
     expect(props.setWhoFilter).toHaveBeenCalledWith('bob')
   })
 
@@ -96,7 +96,7 @@ describe('FilterBar', () => {
       reportFacets: { builds: [], whos: [], assignees: ['yamada_dev', 'sato_playtest'], tags: [] },
     })
 
-    await user.selectOptions(screen.getByDisplayValue('対応者: すべて'), 'yamada_dev')
+    await user.selectOptions(screen.getByLabelText('対応者:'), 'yamada_dev')
     expect(props.setAssigneeFilter).toHaveBeenCalledWith('yamada_dev')
   })
 
@@ -104,8 +104,18 @@ describe('FilterBar', () => {
     const user = userEvent.setup()
     const props = setup()
 
-    await user.selectOptions(screen.getByDisplayValue('対応者: すべて'), '未割り当て')
+    await user.selectOptions(screen.getByLabelText('対応者:'), '未割り当て')
     expect(props.setAssigneeFilter).toHaveBeenCalledWith('__unassigned__')
+  })
+
+  it('keeps the ビルド/報告者/対応者 labels visible even after a value is selected', () => {
+    setup({
+      buildFilter: '0.2.0',
+      reportFacets: { builds: ['0.2.0'], whos: [], assignees: [], tags: [] },
+    })
+    expect(screen.getByText('ビルド:')).toBeInTheDocument()
+    expect(screen.getByText('報告者:')).toBeInTheDocument()
+    expect(screen.getByText('対応者:')).toBeInTheDocument()
   })
 
   it('does not render a chip for a tag hidden via hiddenFieldOptions', () => {
@@ -123,7 +133,7 @@ describe('FilterBar', () => {
     expect(screen.getByRole('button', { name: 'サウンド不具合' })).toBeInTheDocument()
   })
 
-  it('does not apply a color class to tag chips (only 対応 gets a fixed color language)', () => {
+  it('does not apply a color class to tag chips (only 状況 gets a fixed color language)', () => {
     setup()
     const chip = screen.getByRole('button', { name: TEST_TAGS[0] })
     expect(chip.className).not.toMatch(/status-chip/)
