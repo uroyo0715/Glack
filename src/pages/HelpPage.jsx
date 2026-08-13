@@ -222,6 +222,7 @@ function GodotGuide() {
 function StorageGuide() {
   return (
     <section id="storage-setup" className="help-storage-section">
+      <span className="help-storage-section-eyebrow">ここから話題が変わります</span>
       <h1>ストレージ設定（Turso・R2）の手順</h1>
       <p className="help-lead">
         プロジェクトごとの報告データベースと動画・画像の保存先には、Glankが用意する共有ストレージ
