@@ -277,6 +277,20 @@ async function migrateAddStorageConfiguredByIfNeeded() {
 
 await migrateAddStorageConfiguredByIfNeeded()
 
+// マイグレーション: storageConfiguredFromSavedConfig導入前に作られたDBには存在しないため追加する。
+// 「名前を付けて保存」フォームを出すかどうかの判定に使う（保存済み設定から適用した直後は、
+// 同じ内容をもう一度保存する意味がないので隠す）。
+async function migrateAddStorageConfiguredFromSavedConfigIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasColumn = columns.some((c) => c.name === 'storageConfiguredFromSavedConfig')
+  if (hasColumn) return
+  await db.execute(
+    'ALTER TABLE projects ADD COLUMN storageConfiguredFromSavedConfig INTEGER NOT NULL DEFAULT 0'
+  )
+}
+
+await migrateAddStorageConfiguredFromSavedConfigIfNeeded()
+
 // マイグレーション: savedStorageConfigsを「プロジェクトに自動紐付け」から「ユーザーが名前を付けて
 // 保存」する形に作り直す（sourceProjectId/sourceProjectName列 → name列）。この機能はリリース
 // 直後でまだ実運用データが無いに等しいため、既存行を作り直す形の単純なマイグレーションにする

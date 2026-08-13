@@ -533,6 +533,7 @@ export async function getProjectRaw(id) {
     r2ConfigEnc: row.r2ConfigEnc,
     storageConfiguredByEmail: row.storageConfiguredByEmail,
     storageConfiguredByName: row.storageConfiguredByName,
+    storageConfiguredFromSavedConfig: Boolean(row.storageConfiguredFromSavedConfig),
   }
 }
 
@@ -542,7 +543,14 @@ export async function getProjectRaw(id) {
  */
 export async function updateProjectStorageConfig(
   id,
-  { storageMode, tursoConfigEnc, r2ConfigEnc, storageConfiguredByEmail, storageConfiguredByName } = {}
+  {
+    storageMode,
+    tursoConfigEnc,
+    r2ConfigEnc,
+    storageConfiguredByEmail,
+    storageConfiguredByName,
+    storageConfiguredFromSavedConfig,
+  } = {}
 ) {
   const sets = []
   const args = []
@@ -565,6 +573,10 @@ export async function updateProjectStorageConfig(
   if (storageConfiguredByName !== undefined) {
     sets.push('storageConfiguredByName = ?')
     args.push(storageConfiguredByName)
+  }
+  if (storageConfiguredFromSavedConfig !== undefined) {
+    sets.push('storageConfiguredFromSavedConfig = ?')
+    args.push(storageConfiguredFromSavedConfig ? 1 : 0)
   }
   if (sets.length === 0) return getProjectRaw(id)
   args.push(id)

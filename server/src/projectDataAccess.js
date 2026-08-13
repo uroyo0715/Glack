@@ -135,6 +135,7 @@ export function toStorageStatus(project) {
     tursoConfigured: Boolean(project.tursoConfigEnc),
     r2Configured: Boolean(project.r2ConfigEnc),
     configuredByName: project.storageConfiguredByName ?? null,
+    configuredFromSavedConfig: Boolean(project.storageConfiguredFromSavedConfig),
   }
 }
 

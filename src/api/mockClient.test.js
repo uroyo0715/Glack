@@ -409,6 +409,25 @@ describe('mockClient saved storage configs', () => {
     const applied = await client.applySavedStorageConfig(otherProject.id, saved.id)
     expect(applied.tursoConfigured).toBe(true)
     expect(applied.configuredByName).toBe('デモユーザー')
+    expect(applied.configuredFromSavedConfig).toBe(true)
+  })
+
+  it('configuredFromSavedConfig resets to false once manually re-configured', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const [sourceProject] = await client.fetchProjects()
+    const otherProject = await client.createProject('フラグ確認先', null, '')
+    await client.updateProjectStorage(sourceProject.id, { turso: { url: 'libsql://x.turso.io', authToken: 't' } })
+    const [saved] = await client.saveNamedStorageConfig(sourceProject.id, 'フラグ確認用')
+
+    const applied = await client.applySavedStorageConfig(otherProject.id, saved.id)
+    expect(applied.configuredFromSavedConfig).toBe(true)
+
+    const manual = await client.updateProjectStorage(otherProject.id, {
+      turso: { url: 'libsql://y.turso.io', authToken: 't2' },
+    })
+    expect(manual.configuredFromSavedConfig).toBe(false)
   })
 
   it('applySavedStorageConfig rejects an unknown savedConfigId', async () => {

@@ -158,9 +158,12 @@ self_hosted接続情報（Tursoの`url`/`authToken`、R2の各値）はAES-256-G
 DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由で平文では読み出せない
 （設定済みかどうかの真偽値だけを返す）。
 
-- `GET /projects/:id/storage` — `{ storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName }`
+- `GET /projects/:id/storage` — `{ storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName, configuredFromSavedConfig }`
   を返す。非メンバーは`404`。`configuredByName`はTurso/R2を最後に設定した人の表示名
-  （誰も設定していなければ`null`）。
+  （誰も設定していなければ`null`）。`configuredFromSavedConfig`は、直近の設定が
+  `POST /projects/:id/storage/apply-saved`による適用だった場合に`true`（Web UIはこの間、
+  「名前を付けて保存」フォームを隠す。既に名前が付いている設定を同じ内容のまま
+  もう一度保存する意味がないため）。`PATCH /projects/:id/storage`で手入力すると`false`に戻る。
 - `PATCH /projects/:id/storage` — body: `{ storageMode?, turso?: { url, authToken }, r2?: {...} }`。
   渡したフィールドだけ更新する部分更新。`storageMode: 'managed'`は`isManagedAllowed`が
   falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。`turso`/`r2`を

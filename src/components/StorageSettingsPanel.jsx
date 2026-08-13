@@ -236,7 +236,7 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
         </div>
       )}
 
-      {isSelfHosted && (status.tursoConfigured || status.r2Configured) && (
+      {isSelfHosted && (status.tursoConfigured || status.r2Configured) && !status.configuredFromSavedConfig && (
         <form className="storage-save-as-form" onSubmit={handleSaveAsSubmit}>
           <span className="members-panel-label">現在の設定を名前を付けて保存</span>
           <div className="storage-save-as-row">

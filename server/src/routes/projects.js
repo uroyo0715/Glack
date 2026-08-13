@@ -328,10 +328,12 @@ router.patch(
 
     // 接続情報を実際に入力した本人を「設定者」として記録する（呼び出せる設定として自動保存はしない。
     // 呼び出せる設定にしたい場合は、下のPOST /projects/:id/storage/saved-configsで
-    // 明示的に名前を付けて保存してもらう）。
+    // 明示的に名前を付けて保存してもらう）。手入力で上書きしたので、保存済み設定から適用した
+    // 直後という状態は解除する（「名前を付けて保存」フォームを再び出せるようにするため）。
     if (turso != null || r2 != null) {
       update.storageConfiguredByEmail = req.user.email
       update.storageConfiguredByName = req.user.displayName
+      update.storageConfiguredFromSavedConfig = false
     }
 
     const updated = await updateProjectStorageConfig(projectId, update)
@@ -414,6 +416,9 @@ router.post(
     const update = {
       storageConfiguredByEmail: req.user.email,
       storageConfiguredByName: req.user.displayName,
+      // 保存済み設定から適用した直後は、同じ内容をもう一度「名前を付けて保存」する意味がないため、
+      // フロント側でそのフォームを隠すためのフラグを立てる。
+      storageConfiguredFromSavedConfig: true,
     }
     if (saved.tursoConfigEnc) update.tursoConfigEnc = saved.tursoConfigEnc
     if (saved.r2ConfigEnc) update.r2ConfigEnc = saved.r2ConfigEnc

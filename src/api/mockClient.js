@@ -32,7 +32,14 @@ const membersByProject = new Map(
 const storageByProject = new Map(
   projects.map((p) => [
     p.id,
-    { storageMode: 'managed', isManagedAllowed: true, tursoConfigured: true, r2Configured: true, configuredByName: null },
+    {
+      storageMode: 'managed',
+      isManagedAllowed: true,
+      tursoConfigured: true,
+      r2Configured: true,
+      configuredByName: null,
+      configuredFromSavedConfig: false,
+    },
   ])
 )
 
@@ -137,6 +144,7 @@ export async function createProject(name, imageFile, gameEngine) {
     tursoConfigured: false,
     r2Configured: false,
     configuredByName: null,
+    configuredFromSavedConfig: false,
   })
   fieldOptionsByProject.set(project.id, { tag: [], priority: [], platform: [] })
   customFieldOptionsByProject.set(project.id, { tag: [], platform: [] })
@@ -272,6 +280,7 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
   }
   if (turso != null || r2 != null) {
     current.configuredByName = currentUser.displayName
+    current.configuredFromSavedConfig = false
   }
   storageByProject.set(id, current)
   return { ...current }
@@ -349,6 +358,7 @@ export async function applySavedStorageConfig(projectId, savedConfigId) {
   if (saved.hasTurso) current.tursoConfigured = true
   if (saved.hasR2) current.r2Configured = true
   current.configuredByName = currentUser.displayName
+  current.configuredFromSavedConfig = true
   storageByProject.set(id, current)
   return { ...current }
 }

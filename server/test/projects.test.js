@@ -288,6 +288,7 @@ test('a new project defaults to storageMode self_hosted, unconfigured, and manag
     tursoConfigured: false,
     r2Configured: false,
     configuredByName: null,
+    configuredFromSavedConfig: false,
   })
 })
 
@@ -536,6 +537,7 @@ test('named saved configs can be recalled by the owner from any project, but not
   assert.equal(applied.tursoConfigured, true)
   assert.equal(applied.r2Configured, true)
   assert.equal(applied.configuredByName, '呼び出し花子')
+  assert.equal(applied.configuredFromSavedConfig, true)
 
   // 他メンバーが同じsavedConfigIdを指定しても、自分の所有物ではないため404
   const teammateApply = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
@@ -544,6 +546,46 @@ test('named saved configs can be recalled by the owner from any project, but not
     body: JSON.stringify({ savedConfigId: ownConfigs[0].id }),
   })
   assert.equal(teammateApply.status, 404)
+})
+
+test('configuredFromSavedConfig is true right after apply-saved, and resets to false once the project is manually re-configured', async () => {
+  const owner = await createAuthCookie()
+  const sourceProject = await createProjectAs(owner.cookie, 'フラグ確認元')
+  await configureTursoAndR2(owner.cookie, sourceProject.id)
+  await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'フラグ確認用設定' }),
+  })
+  const [saved] = await (
+    await fetch(`${getBaseUrl()}/storage/saved-configs`, { headers: { Cookie: owner.cookie } })
+  ).json()
+
+  const targetProject = await createProjectAs(owner.cookie, 'フラグ確認先')
+  const beforeApply = await (
+    await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage`, { headers: { Cookie: owner.cookie } })
+  ).json()
+  assert.equal(beforeApply.configuredFromSavedConfig, false)
+
+  const afterApply = await (
+    await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
+      method: 'POST',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedConfigId: saved.id }),
+    })
+  ).json()
+  assert.equal(afterApply.configuredFromSavedConfig, true)
+
+  // 手動で入力し直すと、フラグは解除される（=「名前を付けて保存」フォームがまた出せるようになる）
+  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-flag-${crypto.randomUUID()}.sqlite`)}`
+  const afterManualPatch = await (
+    await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage`, {
+      method: 'PATCH',
+      headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turso: { url: tursoUrl, authToken: 'unused' } }),
+    })
+  ).json()
+  assert.equal(afterManualPatch.configuredFromSavedConfig, false)
 })
 
 test('DELETE /storage/saved-configs/:configId removes only the owner’s own config', async () => {
