@@ -191,8 +191,8 @@ function AppShell({ user, setUser }) {
     }
   }, [user, reloadToken])
 
-  function handleCreateProject(name, imageFile) {
-    return createProject(name, imageFile).then((project) => {
+  function handleCreateProject(name, imageFile, gameEngine) {
+    return createProject(name, imageFile, gameEngine).then((project) => {
       setProjects((prev) => [...prev, project])
       return project
     })

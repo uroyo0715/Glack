@@ -262,6 +262,25 @@ describe('mockClient projects', () => {
     await expect(client.createProject('   ', null)).rejects.toThrow('name is required')
   })
 
+  it('createProject defaults gameEngine to empty string, accepts a valid value, and updateProject can change it', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const defaultProject = await client.createProject('未指定ゲーム', null)
+    expect(defaultProject.gameEngine).toBe('')
+
+    const godotProject = await client.createProject('Godotゲーム', null, 'godot')
+    expect(godotProject.gameEngine).toBe('godot')
+
+    await expect(client.createProject('不正なゲーム', null, 'unreal')).rejects.toThrow('unknown gameEngine')
+
+    const updated = await client.updateProject(godotProject.id, { gameEngine: 'unity' })
+    expect(updated.gameEngine).toBe('unity')
+    await expect(client.updateProject(godotProject.id, { gameEngine: 'unreal' })).rejects.toThrow(
+      'unknown gameEngine'
+    )
+  })
+
   it('deleteProjects removes the project and its bugs, leaving other projects untouched', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()

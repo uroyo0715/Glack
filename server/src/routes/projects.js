@@ -18,6 +18,8 @@ import {
   removeProjectCustomOption,
   updateProjectImage,
   updateProjectName,
+  updateProjectGameEngine,
+  GAME_ENGINE_LABELS,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -34,6 +36,10 @@ import {
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
+function isValidGameEngine(value) {
+  return value === '' || Object.prototype.hasOwnProperty.call(GAME_ENGINE_LABELS, value)
+}
+
 router.get(
   '/projects',
   requireAuth,
@@ -47,9 +53,12 @@ router.post(
   requireAuth,
   upload.single('image'),
   asyncHandler(async (req, res) => {
-    const { name } = req.body ?? {}
+    const { name, gameEngine } = req.body ?? {}
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'name is required' })
+    }
+    if (gameEngine != null && !isValidGameEngine(gameEngine)) {
+      return res.status(400).json({ error: `unknown gameEngine: ${gameEngine}` })
     }
 
     // 新規プロジェクトは既定でstorageMode='self_hosted'・未設定のため、この時点ではまだ
@@ -64,7 +73,12 @@ router.post(
       }
     }
 
-    const project = await createProject({ name: name.trim(), imageUrl, creatorEmail: req.user.email })
+    const project = await createProject({
+      name: name.trim(),
+      imageUrl,
+      gameEngine: gameEngine ?? '',
+      creatorEmail: req.user.email,
+    })
     res.status(201).json(project)
   })
 )
@@ -81,9 +95,12 @@ router.patch(
     if (!(await isProjectMember(projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    const { name } = req.body ?? {}
+    const { name, gameEngine } = req.body ?? {}
     if (name != null && !name.trim()) {
       return res.status(400).json({ error: 'name cannot be empty' })
+    }
+    if (gameEngine != null && !isValidGameEngine(gameEngine)) {
+      return res.status(400).json({ error: `unknown gameEngine: ${gameEngine}` })
     }
 
     const project = await getProjectRaw(projectId)
@@ -101,6 +118,10 @@ router.patch(
 
     if (name != null && name.trim()) {
       await updateProjectName(projectId, name.trim())
+    }
+
+    if (gameEngine != null) {
+      await updateProjectGameEngine(projectId, gameEngine)
     }
 
     res.json(await getProjectById(projectId))

@@ -1,4 +1,9 @@
 import React, { useState } from 'react'
+import { GAME_ENGINE_OPTIONS } from '../data/mockBugs.js'
+
+function gameEngineLabel(key) {
+  return GAME_ENGINE_OPTIONS.find((o) => o.key === key)?.label ?? key
+}
 
 export default function ProjectsPage({
   projects,
@@ -11,6 +16,7 @@ export default function ProjectsPage({
 }) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  const [gameEngine, setGameEngine] = useState('')
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -25,6 +31,7 @@ export default function ProjectsPage({
   // カードの「編集」（名前・サムネイル画像をまとめて変更する）。一度に1件だけ編集できる。
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
+  const [editGameEngine, setEditGameEngine] = useState('')
   const [editImageFile, setEditImageFile] = useState(null)
   const [editImagePreview, setEditImagePreview] = useState(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
@@ -38,6 +45,7 @@ export default function ProjectsPage({
 
   function resetForm() {
     setName('')
+    setGameEngine('')
     setImageFile(null)
     setImagePreview(null)
     setError(null)
@@ -49,7 +57,7 @@ export default function ProjectsPage({
     if (!name.trim()) return
     setSubmitting(true)
     setError(null)
-    onCreate(name.trim(), imageFile)
+    onCreate(name.trim(), imageFile, gameEngine)
       .then(() => resetForm())
       .catch((err) => setError(err.message ?? String(err)))
       .finally(() => setSubmitting(false))
@@ -102,6 +110,7 @@ export default function ProjectsPage({
     e.stopPropagation()
     setEditingId(p.id)
     setEditName(p.name)
+    setEditGameEngine(p.gameEngine ?? '')
     setEditImageFile(null)
     setEditImagePreview(p.imageUrl)
     setEditError(null)
@@ -139,7 +148,7 @@ export default function ProjectsPage({
     if (!editName.trim()) return
     setEditSubmitting(true)
     setEditError(null)
-    onUpdateProject(editingId, { name: editName.trim(), imageFile: editImageFile })
+    onUpdateProject(editingId, { name: editName.trim(), imageFile: editImageFile, gameEngine: editGameEngine })
       .then(() => setEditingId(null))
       .catch((err) => setEditError(err.message ?? String(err)))
       .finally(() => setEditSubmitting(false))
@@ -229,6 +238,18 @@ export default function ProjectsPage({
                 onChange={(e) => setEditName(e.target.value)}
                 autoFocus
               />
+              <select
+                className="project-engine-select"
+                value={editGameEngine}
+                onChange={(e) => setEditGameEngine(e.target.value)}
+              >
+                <option value="">ゲームエンジン: 未設定</option>
+                {GAME_ENGINE_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
               {editError && <div className="project-form-error">{editError}</div>}
               <div className="project-form-actions">
                 <button type="submit" disabled={editSubmitting || !editName.trim()}>
@@ -260,6 +281,7 @@ export default function ProjectsPage({
                 {!p.imageUrl && <span className="project-card-placeholder">No Image</span>}
               </div>
               <div className="project-card-name">{p.name}</div>
+              {p.gameEngine && <div className="project-card-engine">{gameEngineLabel(p.gameEngine)}</div>}
               <div className="project-card-id mono">ID: {p.id}</div>
               {!selecting && (
                 <button
@@ -295,6 +317,18 @@ export default function ProjectsPage({
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
               />
+              <select
+                className="project-engine-select"
+                value={gameEngine}
+                onChange={(e) => setGameEngine(e.target.value)}
+              >
+                <option value="">ゲームエンジン: 未設定</option>
+                {GAME_ENGINE_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
               {error && <div className="project-form-error">{error}</div>}
               <div className="project-form-actions">
                 <button type="submit" disabled={submitting || !name.trim()}>

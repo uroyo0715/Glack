@@ -102,14 +102,23 @@ export async function fetchProjects() {
   }))
 }
 
-/** @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
-export async function createProject(name, imageFile) {
+const VALID_GAME_ENGINES = new Set(['unity', 'godot', 'other'])
+
+function requireValidGameEngine(gameEngine) {
+  if (gameEngine != null && gameEngine !== '' && !VALID_GAME_ENGINES.has(gameEngine)) {
+    throw new Error(`unknown gameEngine: ${gameEngine}`)
+  }
+}
+
+/** @returns {Promise<{id: number, name: string, imageUrl: string | null, gameEngine: string}>} */
+export async function createProject(name, imageFile, gameEngine) {
   await delay(150)
   requireLogin()
   if (!name || !name.trim()) throw new Error('name is required')
+  requireValidGameEngine(gameEngine)
   // ダミー実装ではファイルをどこにも送らずローカルのオブジェクトURLを即席で使う
   const imageUrl = imageFile ? URL.createObjectURL(imageFile) : null
-  const project = { id: nextProjectId++, name: name.trim(), imageUrl }
+  const project = { id: nextProjectId++, name: name.trim(), imageUrl, gameEngine: gameEngine || '' }
   projects = [...projects, project]
   membersByProject.set(project.id, [{ email: currentUser.email, displayName: currentUser.displayName }])
   storageByProject.set(project.id, {
@@ -136,13 +145,14 @@ function requireImageStorageReady(projectId) {
 }
 
 /**
- * 作成後に名前・ティザー画像をまとめて編集する。どちらも省略可（渡した方だけ更新）。
- * @returns {Promise<{id: number, name: string, imageUrl: string | null}>}
+ * 作成後に名前・ティザー画像・使用ゲームエンジンをまとめて編集する。いずれも省略可（渡した方だけ更新）。
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null, gameEngine: string}>}
  */
-export async function updateProject(projectId, { name, imageFile } = {}) {
+export async function updateProject(projectId, { name, imageFile, gameEngine } = {}) {
   await delay(150)
   requireLogin()
   if (name != null && !name.trim()) throw new Error('name cannot be empty')
+  requireValidGameEngine(gameEngine)
   if (imageFile) requireImageStorageReady(projectId)
   const id = Number(projectId)
   projects = projects.map((p) => {
@@ -150,6 +160,7 @@ export async function updateProject(projectId, { name, imageFile } = {}) {
     const next = { ...p }
     if (name != null) next.name = name.trim()
     if (imageFile) next.imageUrl = URL.createObjectURL(imageFile)
+    if (gameEngine != null) next.gameEngine = gameEngine
     return next
   })
   return projects.find((p) => p.id === id)

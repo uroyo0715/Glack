@@ -113,15 +113,18 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
 `GET/PATCH /reports*`系も同様にプロジェクト単位のメンバーシップでガードされる。
 
 - `GET /projects` — 自分がメンバーのプロジェクトだけを返す。各要素は
-  `{ id, name, imageUrl, bugCount, hiddenFieldOptions, customFieldOptions }`（`bugCount`は
-  そのプロジェクトに紐づくバグ報告数、`hiddenFieldOptions`は3.0.7、`customFieldOptions`は3.0.8参照）。
-- `POST /projects` — `multipart/form-data`。`name`（必須）と`image`（任意、ティザー画像）を受け取り、
+  `{ id, name, imageUrl, gameEngine, bugCount, hiddenFieldOptions, customFieldOptions }`
+  （`bugCount`はそのプロジェクトに紐づくバグ報告数、`gameEngine`は`'unity' | 'godot' | 'other' | ''`
+  （空文字は未設定。UnityとGodot両方のSDKを提供しているため、どちらを使っているプロジェクトか
+  見分けられるようにするための項目）、`hiddenFieldOptions`は3.0.7、`customFieldOptions`は3.0.8参照）。
+- `POST /projects` — `multipart/form-data`。`name`（必須）、`image`（任意、ティザー画像）、
+  `gameEngine`（任意、`'unity' | 'godot' | 'other'`。未知の値は`400`）を受け取り、
   作成したプロジェクトを`201`で返す。作成者は自動的にそのプロジェクトのメンバーになる。
-- `PATCH /projects/:id` — `multipart/form-data`。`name`・`image`はどちらも任意で、渡した方だけ
-  更新する部分更新（プロジェクト一覧カードの「編集」から使う）。`name`を渡して空文字の場合は
-  `400`。`image`を渡して差し替える場合、古い画像ファイルは削除する。ストレージ未設定
-  （self_hostedでR2未設定）の間は`409 { error, code: 'r2_not_configured' }`。更新後の
-  プロジェクトを返す。非メンバーは`404`。
+- `PATCH /projects/:id` — `multipart/form-data`。`name`・`image`・`gameEngine`はいずれも任意で、
+  渡した方だけ更新する部分更新（プロジェクト一覧カードの「編集」から使う）。`name`を渡して
+  空文字の場合は`400`。`gameEngine`が未知の値の場合も`400`。`image`を渡して差し替える場合、
+  古い画像ファイルは削除する。ストレージ未設定（self_hostedでR2未設定）の間は
+  `409 { error, code: 'r2_not_configured' }`。更新後のプロジェクトを返す。非メンバーは`404`。
 - `PATCH /projects/:id/image` — `multipart/form-data`。`image`（必須）で作成後のティザー画像を
   差し替える。古い画像ファイルは削除する。ストレージ未設定（self_hostedでR2未設定）の間は
   `409 { error, code: 'r2_not_configured' }`。更新後のプロジェクトを返す。非メンバーは`404`。

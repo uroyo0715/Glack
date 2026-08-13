@@ -5,7 +5,7 @@ import ProjectsPage from './ProjectsPage.jsx'
 
 const projects = [
   { id: 1, name: 'Nightfall Trail', imageUrl: null, bugCount: 9 },
-  { id: 2, name: 'Second Game', imageUrl: 'https://example.com/img.png', bugCount: 0 },
+  { id: 2, name: 'Second Game', imageUrl: 'https://example.com/img.png', bugCount: 0, gameEngine: 'godot' },
 ]
 
 function renderPage(overrides = {}) {
@@ -35,6 +35,14 @@ describe('ProjectsPage', () => {
     expect(props.onOpen).toHaveBeenCalledWith(1)
   })
 
+  it('shows a game engine badge only for projects that have one set', () => {
+    renderPage()
+    expect(screen.getByText('Godot')).toBeInTheDocument() // Second Gameのバッジ
+    const nightfallCard = screen.getByText('Nightfall Trail').closest('.project-card')
+    expect(within(nightfallCard).queryByText('Godot')).not.toBeInTheDocument()
+    expect(within(nightfallCard).queryByText('Unity')).not.toBeInTheDocument()
+  })
+
   it('opens the create form, then submits name + no image', async () => {
     const user = userEvent.setup()
     const props = renderPage({
@@ -45,7 +53,21 @@ describe('ProjectsPage', () => {
     await user.type(screen.getByPlaceholderText('プロジェクト名'), '新しいゲーム')
     await user.click(screen.getByRole('button', { name: '作成' }))
 
-    expect(props.onCreate).toHaveBeenCalledWith('新しいゲーム', null)
+    expect(props.onCreate).toHaveBeenCalledWith('新しいゲーム', null, '')
+  })
+
+  it('lets the user pick a game engine when creating a project', async () => {
+    const user = userEvent.setup()
+    const props = renderPage({
+      onCreate: vi.fn().mockResolvedValue({ id: 3, name: 'Godotゲーム', imageUrl: null, gameEngine: 'godot' }),
+    })
+
+    await user.click(screen.getByRole('button', { name: /新規プロジェクト/ }))
+    await user.type(screen.getByPlaceholderText('プロジェクト名'), 'Godotゲーム')
+    await user.selectOptions(screen.getByDisplayValue('ゲームエンジン: 未設定'), 'Godot')
+    await user.click(screen.getByRole('button', { name: '作成' }))
+
+    expect(props.onCreate).toHaveBeenCalledWith('Godotゲーム', null, 'godot')
   })
 
   it('disables submit until a name is entered, and cancel closes the form', async () => {
@@ -98,7 +120,11 @@ describe('ProjectsPage', () => {
 
       await user.click(within(form).getByRole('button', { name: '保存' }))
 
-      expect(props.onUpdateProject).toHaveBeenCalledWith(1, { name: 'リネーム後', imageFile: file })
+      expect(props.onUpdateProject).toHaveBeenCalledWith(1, {
+        name: 'リネーム後',
+        imageFile: file,
+        gameEngine: '',
+      })
     })
 
     it('only shows the "画像を削除" action once a project has an image, and it calls onRemoveImage without closing the project', async () => {
@@ -116,6 +142,25 @@ describe('ProjectsPage', () => {
 
       expect(props.onRemoveImage).toHaveBeenCalledWith(2)
       expect(props.onOpen).not.toHaveBeenCalled()
+    })
+
+    it('pre-fills the game engine selector from the project and lets it be changed', async () => {
+      const user = userEvent.setup()
+      const props = renderPage()
+      const card = screen.getByText('Second Game').closest('.project-card')
+
+      await user.click(within(card).getByRole('button', { name: 'プロジェクトを編集' }))
+      const form = screen.getByPlaceholderText('プロジェクト名').closest('form')
+      expect(within(form).getByDisplayValue('Godot')).toBeInTheDocument()
+
+      await user.selectOptions(within(form).getByDisplayValue('Godot'), 'Unity')
+      await user.click(within(form).getByRole('button', { name: '保存' }))
+
+      expect(props.onUpdateProject).toHaveBeenCalledWith(2, {
+        name: 'Second Game',
+        imageFile: null,
+        gameEngine: 'unity',
+      })
     })
 
     it('cancel closes the edit form without saving', async () => {

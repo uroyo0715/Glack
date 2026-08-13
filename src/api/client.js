@@ -8,10 +8,11 @@ export async function fetchProjects() {
 }
 
 /** @returns {Promise<{id: number, name: string, imageUrl: string | null}>} */
-export async function createProject(name, imageFile) {
+export async function createProject(name, imageFile, gameEngine) {
   const form = new FormData()
   form.set('name', name)
   if (imageFile) form.set('image', imageFile)
+  if (gameEngine) form.set('gameEngine', gameEngine)
   const res = await fetch(`${BASE_URL}/projects`, {
     method: 'POST',
     credentials: 'include',
@@ -25,14 +26,15 @@ export async function createProject(name, imageFile) {
 }
 
 /**
- * 作成後に名前・ティザー画像をまとめて編集する。どちらも省略可（渡した方だけ更新）。
+ * 作成後に名前・ティザー画像・使用ゲームエンジンをまとめて編集する。いずれも省略可（渡した方だけ更新）。
  * 画像を差し替える場合、self_hostedでR2未設定の間は409。
- * @returns {Promise<{id: number, name: string, imageUrl: string | null}>}
+ * @returns {Promise<{id: number, name: string, imageUrl: string | null, gameEngine: string}>}
  */
-export async function updateProject(projectId, { name, imageFile } = {}) {
+export async function updateProject(projectId, { name, imageFile, gameEngine } = {}) {
   const form = new FormData()
   if (name != null) form.set('name', name)
   if (imageFile) form.set('image', imageFile)
+  if (gameEngine != null) form.set('gameEngine', gameEngine)
   const res = await fetch(`${BASE_URL}/projects/${projectId}`, {
     method: 'PATCH',
     credentials: 'include',

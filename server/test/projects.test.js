@@ -46,6 +46,41 @@ test('POST /projects creates a project without an image, then GET /projects list
   assert.ok(list.some((p) => p.id === created.id))
 })
 
+test('POST /projects defaults gameEngine to empty string, accepts a valid value, and rejects an unknown one', async () => {
+  const { cookie } = await createAuthCookie()
+
+  const defaultForm = new FormData()
+  defaultForm.set('name', 'エンジン未指定プロジェクト')
+  const defaultRes = await fetch(`${getBaseUrl()}/projects`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: defaultForm,
+  })
+  assert.equal(defaultRes.status, 201)
+  assert.equal((await defaultRes.json()).gameEngine, '')
+
+  const godotForm = new FormData()
+  godotForm.set('name', 'Godotプロジェクト')
+  godotForm.set('gameEngine', 'godot')
+  const godotRes = await fetch(`${getBaseUrl()}/projects`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: godotForm,
+  })
+  assert.equal(godotRes.status, 201)
+  assert.equal((await godotRes.json()).gameEngine, 'godot')
+
+  const badForm = new FormData()
+  badForm.set('name', '不正なエンジン')
+  badForm.set('gameEngine', 'not-a-real-engine')
+  const badRes = await fetch(`${getBaseUrl()}/projects`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: badForm,
+  })
+  assert.equal(badRes.status, 400)
+})
+
 test('DELETE /projects requires auth', async () => {
   const res = await fetch(`${getBaseUrl()}/projects`, {
     method: 'DELETE',
@@ -529,6 +564,46 @@ test('PATCH /projects/:id updates the name and/or image together, and rejects an
     body: emptyNameForm,
   })
   assert.equal(emptyNameRes.status, 400)
+})
+
+test('PATCH /projects/:id updates gameEngine, and rejects an unknown value', async () => {
+  const owner = await createAuthCookie()
+  const project = await createManagedProject({
+    name: 'エンジン変更テスト',
+    imageUrl: null,
+    creatorEmail: owner.user.email,
+  })
+  assert.equal(project.gameEngine, '')
+
+  const unityForm = new FormData()
+  unityForm.set('gameEngine', 'unity')
+  const unityRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: unityForm,
+  })
+  assert.equal(unityRes.status, 200)
+  assert.equal((await unityRes.json()).gameEngine, 'unity')
+
+  const badForm = new FormData()
+  badForm.set('gameEngine', 'unreal')
+  const badRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: badForm,
+  })
+  assert.equal(badRes.status, 400)
+
+  // 空文字を渡すと「未設定」に戻せる
+  const clearForm = new FormData()
+  clearForm.set('gameEngine', '')
+  const clearRes = await fetch(`${getBaseUrl()}/projects/${project.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie },
+    body: clearForm,
+  })
+  assert.equal(clearRes.status, 200)
+  assert.equal((await clearRes.json()).gameEngine, '')
 })
 
 test('PATCH /projects/:id requires membership', async () => {

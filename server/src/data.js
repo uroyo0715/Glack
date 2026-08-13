@@ -10,6 +10,14 @@ export const PRIORITY_LABELS = {
   low: '低',
 }
 
+// UnityとGodot両方のSDKを提供しているため、どちらを使っているプロジェクトか見分けられる
+// ようにするための項目。空文字は「未設定」を表す（この3つのキー以外は不正な値として扱う）。
+export const GAME_ENGINE_LABELS = {
+  unity: 'Unity',
+  godot: 'Godot',
+  other: 'その他',
+}
+
 export function resolveTagLabel(tag) {
   return TAG_LABELS[tag] ?? tag
 }
@@ -477,6 +485,7 @@ function rowToProject(row) {
     id: Number(row.id),
     name: row.name,
     imageUrl: row.imageUrl,
+    gameEngine: row.gameEngine ?? '',
     bugCount: Number(row.bugCount),
     hiddenFieldOptions: parseHiddenFieldOptions(row.hiddenFieldOptions),
     customFieldOptions: parseCustomFieldOptions(row.customFieldOptions),
@@ -682,10 +691,10 @@ export async function removeProjectMember(projectId, email) {
 // ゲート（チームごとに個別にTurso/R2を持つself_hostedが既定、managedは許可制）だったが、
 // 実際には運営者自身のチームで使うことが主目的のため、新規プロジェクトは最初から
 // Glank共有のmanagedストレージ（プロジェクトごとのTurso/R2設定が不要）を選べるようにする。
-export async function createProject({ name, imageUrl, creatorEmail }) {
+export async function createProject({ name, imageUrl, gameEngine, creatorEmail }) {
   const result = await db.execute({
-    sql: 'INSERT INTO projects (name, imageUrl, isManagedAllowed) VALUES (?, ?, 1)',
-    args: [name, imageUrl ?? null],
+    sql: 'INSERT INTO projects (name, imageUrl, gameEngine, isManagedAllowed) VALUES (?, ?, ?, 1)',
+    args: [name, imageUrl ?? null, gameEngine ?? ''],
   })
   const projectId = result.lastInsertRowid
   await addProjectMembers(projectId, [creatorEmail])
@@ -697,6 +706,15 @@ export async function updateProjectImage(id, imageUrl) {
   await db.execute({
     sql: 'UPDATE projects SET imageUrl = ? WHERE id = ?',
     args: [imageUrl, id],
+  })
+  return getProjectById(id)
+}
+
+/** 使用しているゲームエンジンを作成後に変更する。空文字は「未設定」に戻す。 */
+export async function updateProjectGameEngine(id, gameEngine) {
+  await db.execute({
+    sql: 'UPDATE projects SET gameEngine = ? WHERE id = ?',
+    args: [gameEngine, id],
   })
   return getProjectById(id)
 }

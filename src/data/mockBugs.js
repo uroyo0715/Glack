@@ -219,6 +219,14 @@ export const PRIORITY_OPTIONS = [
 
 export const PLATFORM_OPTIONS = ['PC', 'PlayStation', 'Switch', 'Switch2', 'Xbox']
 
+// プロジェクトが使用しているゲームエンジン。UnityとGodot両方のSDKを提供しているため、
+// どちらを使っているプロジェクトか見分けられるようにするための項目。空文字は未設定。
+export const GAME_ENGINE_OPTIONS = [
+  { key: 'unity', label: 'Unity' },
+  { key: 'godot', label: 'Godot' },
+  { key: 'other', label: 'その他' },
+]
+
 // 「対応者」フィルターで「未割り当て（assignee === ''）」を選べるようにするための予約値。
 // 実際の対応者名と衝突しないよう、サーバー側(server/src/data.js の UNASSIGNED_FILTER_VALUE)と
 // 同じ値に合わせること。

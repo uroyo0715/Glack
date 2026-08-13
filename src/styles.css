@@ -326,6 +326,12 @@ body {
   font-weight: 700;
   font-size: 14px;
 }
+.project-card-engine {
+  padding: 0 14px;
+  margin-top: -8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
 .project-card-add {
   align-items: center;
   justify-content: center;
@@ -369,6 +375,16 @@ body {
   border-radius: 4px;
   background: var(--bg);
   color: var(--text);
+}
+.project-engine-select {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
 }
 .project-form-error {
   color: var(--error, #d9534f);

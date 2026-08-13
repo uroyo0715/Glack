@@ -92,10 +92,13 @@ await db.executeMultiple(`
   -- customFieldOptions: このプロジェクトが追加した独自の種類・プラットフォーム項目
   -- （JSON: {"tag": [...], "platform": [...]}）。既定プリセットと違い、これは追加/削除ができる
   -- （優先度は固定の3段階のため対象外）。
+  -- gameEngine: 'unity' | 'godot' | 'other' | ''（未設定）。UnityとGodot両方のSDKを
+  -- 提供しているため、どちらを使っているプロジェクトか見分けられるようにするための項目。
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     imageUrl TEXT,
+    gameEngine TEXT NOT NULL DEFAULT '',
     storageMode TEXT NOT NULL DEFAULT 'self_hosted',
     isManagedAllowed INTEGER NOT NULL DEFAULT 0,
     tursoConfigEnc TEXT,
@@ -235,6 +238,16 @@ async function migrateAddCustomFieldOptionsIfNeeded() {
 }
 
 await migrateAddCustomFieldOptionsIfNeeded()
+
+// マイグレーション: gameEngine導入前に作られたDBには存在しないため追加する。
+async function migrateAddGameEngineIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasColumn = columns.some((c) => c.name === 'gameEngine')
+  if (hasColumn) return
+  await db.execute("ALTER TABLE projects ADD COLUMN gameEngine TEXT NOT NULL DEFAULT ''")
+}
+
+await migrateAddGameEngineIfNeeded()
 
 // マイグレーション: 1件のバグ報告に1つだけだった「種類」(tag/tagLabel列)を、複数付けられる
 // tags列（JSON配列の文字列）に置き換える。ラベルはTAG_LABELS（server/src/data.js）から
