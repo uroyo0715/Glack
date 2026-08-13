@@ -237,6 +237,7 @@ export async function deleteBug(client, id) {
   const tx = await client.transaction('write')
   try {
     await tx.execute({ sql: 'DELETE FROM bugInputs WHERE bugId = ?', args: [id] })
+    await tx.execute({ sql: 'DELETE FROM bugComments WHERE bugId = ?', args: [id] })
     await tx.execute({ sql: 'DELETE FROM bugs WHERE id = ?', args: [id] })
     await tx.commit()
   } catch (err) {
@@ -340,6 +341,10 @@ export async function deleteAllBugsForProject(client, projectId) {
       sql: 'DELETE FROM bugInputs WHERE bugId IN (SELECT id FROM bugs WHERE projectId = ?)',
       args: [projectId],
     })
+    await tx.execute({
+      sql: 'DELETE FROM bugComments WHERE bugId IN (SELECT id FROM bugs WHERE projectId = ?)',
+      args: [projectId],
+    })
     await tx.execute({ sql: 'DELETE FROM bugs WHERE projectId = ?', args: [projectId] })
     await tx.commit()
   } catch (err) {
@@ -352,6 +357,40 @@ export async function deleteAllBugsForProject(client, projectId) {
   }
 
   return { deletedVideoUrls }
+}
+
+function rowToComment(row) {
+  return {
+    id: Number(row.id),
+    bugId: Number(row.bugId),
+    authorEmail: row.authorEmail,
+    authorDisplayName: row.authorDisplayName,
+    body: row.body,
+    createdAt: row.createdAt,
+  }
+}
+
+/** バグ報告のコメント一覧を投稿順に返す。 */
+export async function listBugComments(client, bugId) {
+  const { rows } = await client.execute({
+    sql: 'SELECT * FROM bugComments WHERE bugId = ? ORDER BY id ASC',
+    args: [bugId],
+  })
+  return rows.map(rowToComment)
+}
+
+/** バグ報告にコメントを1件追加する。authorEmail/authorDisplayNameは投稿時点のユーザー情報を渡す。 */
+export async function createBugComment(client, { bugId, authorEmail, authorDisplayName, body }) {
+  const result = await client.execute({
+    sql: `INSERT INTO bugComments (bugId, authorEmail, authorDisplayName, body, createdAt)
+          VALUES (?, ?, ?, ?, datetime('now'))`,
+    args: [bugId, authorEmail, authorDisplayName, body],
+  })
+  const { rows } = await client.execute({
+    sql: 'SELECT * FROM bugComments WHERE id = ?',
+    args: [result.lastInsertRowid],
+  })
+  return rowToComment(rows[0])
 }
 
 // --- プロジェクト・ユーザー・セッション（コントロールプレーン）。常にGlank自前のdb（db.js）を使う。

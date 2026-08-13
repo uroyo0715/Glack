@@ -33,6 +33,15 @@ function renderPage(overrides = {}) {
     hiddenFieldOptions: { tag: [], priority: [], platform: [] },
     customFieldOptions: { tag: [], platform: [] },
     onFetchMembers: vi.fn().mockResolvedValue([]),
+    onFetchComments: vi.fn().mockResolvedValue([]),
+    onCreateComment: vi.fn().mockResolvedValue({
+      id: 1,
+      bugId: 1,
+      authorEmail: 'demo@example.com',
+      authorDisplayName: 'デモユーザー',
+      body: 'コメント本文',
+      createdAt: '2026-08-13T00:00:00Z',
+    }),
     ...overrides,
   }
   render(<BugDetailPage {...props} />)
@@ -68,5 +77,50 @@ describe('BugDetailPage - no video', () => {
     await user.upload(input, file)
 
     expect(await screen.findByText('動画の追加に失敗しました')).toBeInTheDocument()
+  })
+})
+
+describe('BugDetailPage - comment thread', () => {
+  it('loads and shows existing comments', async () => {
+    renderPage({
+      onFetchComments: vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          bugId: 1,
+          authorEmail: 'demo@example.com',
+          authorDisplayName: 'デモユーザー',
+          body: '再現できました',
+          createdAt: '2026-08-13T00:00:00Z',
+        },
+      ]),
+    })
+
+    expect(await screen.findByText('再現できました')).toBeInTheDocument()
+    expect(screen.getByText('デモユーザー')).toBeInTheDocument()
+  })
+
+  it('posts a new comment and appends it to the list', async () => {
+    const user = userEvent.setup()
+    const props = renderPage()
+
+    await screen.findByText('まだコメントはありません。')
+    await user.type(screen.getByPlaceholderText('コメントを入力...'), 'コメント本文')
+    await user.click(screen.getByRole('button', { name: '投稿' }))
+
+    expect(props.onCreateComment).toHaveBeenCalledWith(1, 'コメント本文')
+    expect(await screen.findByText('コメント本文')).toBeInTheDocument()
+  })
+
+  it('shows an error message when posting a comment fails', async () => {
+    const user = userEvent.setup()
+    renderPage({
+      onCreateComment: vi.fn().mockRejectedValue(new Error('コメントの投稿に失敗しました')),
+    })
+
+    await screen.findByText('まだコメントはありません。')
+    await user.type(screen.getByPlaceholderText('コメントを入力...'), 'コメント本文')
+    await user.click(screen.getByRole('button', { name: '投稿' }))
+
+    expect(await screen.findByText('コメントの投稿に失敗しました')).toBeInTheDocument()
   })
 })

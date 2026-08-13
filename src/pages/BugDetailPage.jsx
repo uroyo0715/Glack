@@ -3,6 +3,7 @@ import VideoPlayer from '../components/VideoPlayer.jsx'
 import InputLogStrip from '../components/InputLogStrip.jsx'
 import EditReportForm from '../components/EditReportForm.jsx'
 import SegmentedToggle from '../components/SegmentedToggle.jsx'
+import CommentThread from '../components/CommentThread.jsx'
 import { STATUS_COLUMNS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
 
 function priorityLabel(key) {
@@ -38,6 +39,8 @@ export default function BugDetailPage({
   customFieldOptions,
   onFetchMembers,
   onDeleteReport,
+  onFetchComments,
+  onCreateComment,
 }) {
   const [elapsed, setElapsed] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -199,6 +202,25 @@ export default function BugDetailPage({
               </select>
             </div>
           </div>
+
+          <div className="meta-row">
+            <div className="meta-item">
+              <div className="k">報告者</div>
+              <div className="v">{bug.who}</div>
+            </div>
+            <div className="meta-item">
+              <div className="k">ビルド</div>
+              <div className="v mono">{bug.build}</div>
+            </div>
+            <div className="meta-item">
+              <div className="k">プラットフォーム</div>
+              <div className="v">{bug.platform}</div>
+            </div>
+            <div className="meta-item">
+              <div className="k">優先度</div>
+              <div className="v">{priorityLabel(bug.priority)}</div>
+            </div>
+          </div>
         </div>
 
         {confirmingDelete && (
@@ -281,24 +303,7 @@ export default function BugDetailPage({
           </div>
         )}
 
-        <div className="meta-row">
-          <div className="meta-item">
-            <div className="k">報告者</div>
-            <div className="v">{bug.who}</div>
-          </div>
-          <div className="meta-item">
-            <div className="k">ビルド</div>
-            <div className="v mono">{bug.build}</div>
-          </div>
-          <div className="meta-item">
-            <div className="k">プラットフォーム</div>
-            <div className="v">{bug.platform}</div>
-          </div>
-          <div className="meta-item">
-            <div className="k">優先度</div>
-            <div className="v">{priorityLabel(bug.priority)}</div>
-          </div>
-        </div>
+        <CommentThread bugId={bug.id} onFetchComments={onFetchComments} onCreateComment={onCreateComment} />
 
         <div
           className="detail-resize-handle"

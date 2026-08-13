@@ -11,6 +11,8 @@ let bugs = seedBugs.map((b) => ({ ...b }))
 let projects = seedProjects.map((p) => ({ ...p }))
 let nextProjectId = projects.length + 1
 let nextBugId = Math.max(0, ...bugs.map((b) => b.id)) + 1
+let comments = [] // { id, bugId, authorEmail, authorDisplayName, body, createdAt }
+let nextCommentId = 1
 // projectId -> {email, displayName}[]。モックはユーザーが1人しかいないため実際のアクセス制御はしないが、
 // メンバー一覧UIの動作確認はできるようにしておく。招待されただけのメンバーはdisplayName: null
 // （実バックエンドで「まだ一度もログインしていない」ケースを模す）。
@@ -445,5 +447,36 @@ export async function deleteReport(id) {
   const exists = bugs.some((b) => String(b.id) === String(id))
   if (!exists) throw new Error(`deleteReport: not found (${id})`)
   bugs = bugs.filter((b) => String(b.id) !== String(id))
+  comments = comments.filter((c) => String(c.bugId) !== String(id))
   return { deleted: true }
+}
+
+/** @returns {Promise<import('./types.js').Comment[]>} */
+export async function fetchReportComments(id) {
+  await delay()
+  requireLogin()
+  const exists = bugs.some((b) => String(b.id) === String(id))
+  if (!exists) throw new Error(`fetchReportComments: not found (${id})`)
+  return comments.filter((c) => String(c.bugId) === String(id))
+}
+
+/** @returns {Promise<import('./types.js').Comment>} */
+export async function createReportComment(id, body) {
+  await delay(150)
+  requireLogin()
+  const exists = bugs.some((b) => String(b.id) === String(id))
+  if (!exists) throw new Error(`createReportComment: not found (${id})`)
+  const trimmed = (body ?? '').trim()
+  if (!trimmed) throw new Error('body cannot be empty')
+
+  const comment = {
+    id: nextCommentId++,
+    bugId: Number(id),
+    authorEmail: currentUser.email,
+    authorDisplayName: currentUser.displayName,
+    body: trimmed,
+    createdAt: new Date().toISOString(),
+  }
+  comments = [...comments, comment]
+  return comment
 }

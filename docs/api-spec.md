@@ -331,6 +331,27 @@ Response: 更新後の`Bug`（`inputs`は引き続き`[]`のまま。実際の�
 
 Response: `200 OK`、`{ "deleted": true }`。取り消せない操作のため、フロント側は削除前に確認ダイアログを挟む。
 
+### 3.6 バグ報告内のコメント（スレッド）
+
+権限は他の`/reports/:id`系と同様、ログイン済みのプロジェクトメンバーであれば誰でも閲覧・投稿可。
+非メンバー・未ログイン・存在しないidはいずれも`404`（未ログインのみ`401`）。
+
+- `GET /reports/:id/comments` — 投稿順（古い順）のコメント一覧を返す。
+  ```ts
+  interface Comment {
+    id: number
+    bugId: number
+    authorEmail: string
+    authorDisplayName: string // 投稿時点の表示名のスナップショット（後で改名しても過去コメントの表示は変わらない）
+    body: string
+    createdAt: string
+  }
+  ```
+- `POST /reports/:id/comments` — body: `{ body: string }`（空文字は`400`）。`authorEmail`/
+  `authorDisplayName`はセッションのユーザー情報から自動的に付与される。`201 Created`、作成された`Comment`。
+
+報告自体を削除（`DELETE /reports/:id`）すると、紐づくコメントもまとめて削除される。
+
 ## 4. Unity SDK 実装メモ（送信仕様の要点）
 
 - SDKはリングバッファで直近Nフレームの入力を保持し、バグ報告トリガー（ホットキー等）が発火した時点で確定させて送信する想定。

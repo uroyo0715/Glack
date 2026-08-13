@@ -28,6 +28,8 @@ export const {
   deleteReport,
   createManualReport,
   attachReportVideo,
+  fetchReportComments,
+  createReportComment,
   loginWithGoogle,
   logout,
   me,

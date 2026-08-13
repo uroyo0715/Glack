@@ -57,6 +57,18 @@ export const BUG_TABLES_SCHEMA = `
     label TEXT NOT NULL,
     holdFrames INTEGER
   );
+
+  -- バグ報告内のコメント（スレッド）。authorEmail/authorDisplayNameは投稿時点の値を
+  -- そのまま保存する（usersテーブルはコントロールプレーンDB側にあり、self_hostedプロジェクトの
+  -- 別DBからは参照できないため、JOINせずに済むようスナップショットで持つ。bugs.whoと同じ考え方）。
+  CREATE TABLE IF NOT EXISTS bugComments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bugId INTEGER NOT NULL REFERENCES bugs(id),
+    authorEmail TEXT NOT NULL,
+    authorDisplayName TEXT NOT NULL,
+    body TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+  );
 `
 
 await db.executeMultiple(`

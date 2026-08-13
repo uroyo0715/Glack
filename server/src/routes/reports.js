@@ -13,6 +13,8 @@ import {
   getProjectRaw,
   isProjectMember,
   PRIORITY_LABELS,
+  listBugComments,
+  createBugComment,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveVideo, deleteFile } from '../storage.js'
@@ -112,6 +114,51 @@ router.get(
     const bug = await getBugById(resolved.client, id)
     if (!bug) return res.status(404).json({ error: 'not found' })
     res.json(bug)
+  })
+)
+
+router.get(
+  '/reports/:id/comments',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id)
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+    const bug = await getBugById(resolved.client, id)
+    if (!bug) return res.status(404).json({ error: 'not found' })
+    res.json(await listBugComments(resolved.client, id))
+  })
+)
+
+router.post(
+  '/reports/:id/comments',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id)
+    const projectId = await resolveBugProjectId(id)
+    if (!projectId || !(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const body = (req.body?.body ?? '').trim()
+    if (!body) {
+      return res.status(400).json({ error: 'body cannot be empty' })
+    }
+    const resolved = await requireProjectDbClient(res, projectId)
+    if (!resolved) return
+    const bug = await getBugById(resolved.client, id)
+    if (!bug) return res.status(404).json({ error: 'not found' })
+
+    const comment = await createBugComment(resolved.client, {
+      bugId: id,
+      authorEmail: req.user.email,
+      authorDisplayName: req.user.displayName,
+      body,
+    })
+    res.status(201).json(comment)
   })
 )
 

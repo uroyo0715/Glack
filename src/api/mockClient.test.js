@@ -86,6 +86,36 @@ describe('mockClient reports', () => {
     expect(refetched.status).toBe('in_progress')
   })
 
+  it('fetchReportComments starts empty, and createReportComment appends comments in order', async () => {
+    const client = await freshClient()
+    const user = await client.loginWithGoogle()
+
+    const [target] = await client.fetchReports()
+    expect(await client.fetchReportComments(target.id)).toEqual([])
+
+    const first = await client.createReportComment(target.id, '再現できました')
+    expect(first.body).toBe('再現できました')
+    expect(first.authorEmail).toBe(user.email)
+    expect(first.authorDisplayName).toBe(user.displayName)
+    expect(first.bugId).toBe(target.id)
+    expect(first.createdAt).toBeTruthy()
+
+    const second = await client.createReportComment(target.id, '私も確認しました')
+
+    const comments = await client.fetchReportComments(target.id)
+    expect(comments.map((c) => c.body)).toEqual(['再現できました', '私も確認しました'])
+    expect(comments.map((c) => c.id)).toEqual([first.id, second.id])
+  })
+
+  it('createReportComment rejects an empty body and unknown report ids', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const [target] = await client.fetchReports()
+
+    await expect(client.createReportComment(target.id, '   ')).rejects.toThrow('body cannot be empty')
+    await expect(client.createReportComment(999999, 'hi')).rejects.toThrow('not found')
+  })
+
   it('attachReportVideo sets videoUrl/fps/durationFrames on a report created with no video', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()

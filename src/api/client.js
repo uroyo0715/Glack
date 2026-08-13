@@ -306,6 +306,25 @@ export async function attachReportVideo(id, { videoFile, fps, durationFrames }) 
   return res.json()
 }
 
+/** @returns {Promise<import('./types.js').Comment[]>} */
+export async function fetchReportComments(id) {
+  const res = await fetch(`${BASE_URL}/reports/${id}/comments`, { credentials: 'include' })
+  if (!res.ok) await throwApiError(res, `fetchReportComments failed: ${res.status}`)
+  return res.json()
+}
+
+/** @returns {Promise<import('./types.js').Comment>} */
+export async function createReportComment(id, body) {
+  const res = await fetch(`${BASE_URL}/reports/${id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ body }),
+  })
+  if (!res.ok) await throwApiError(res, `createReportComment failed: ${res.status}`)
+  return res.json()
+}
+
 // GoogleのOAuth同意画面へブラウザごと遷移させる必要があるため、fetchではなく
 // 実際のページ遷移で行う。遷移が起きるのでこのPromiseは意図的に解決しない。
 export async function loginWithGoogle() {

@@ -571,3 +571,110 @@ test('DELETE /reports/:id requires auth and returns 404 for unknown id', async (
   const res = await fetch(`${getBaseUrl()}/reports/999999`, { method: 'DELETE', headers: { Cookie: cookie } })
   assert.equal(res.status, 404)
 })
+
+test('GET/POST /reports/:id/comments lets members post and list comments in order', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const empty = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    headers: { Cookie: owner.cookie },
+  })
+  assert.equal(empty.status, 200)
+  assert.deepEqual(await empty.json(), [])
+
+  const first = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '再現できました' }),
+  })
+  assert.equal(first.status, 201)
+  const firstComment = await first.json()
+  assert.equal(firstComment.body, '再現できました')
+  assert.equal(firstComment.authorEmail, PROJECT_OWNER_EMAIL)
+  assert.equal(firstComment.authorDisplayName, owner.user.displayName)
+  assert.equal(firstComment.bugId, created.id)
+  assert.ok(firstComment.createdAt)
+
+  const teammate = await createAuthCookie({ email: PROJECT_OWNER_EMAIL }) // 同じメンバーとして2件目を投稿
+  const second = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: teammate.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '私も確認しました' }),
+  })
+  assert.equal(second.status, 201)
+
+  const list = await (
+    await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, { headers: { Cookie: owner.cookie } })
+  ).json()
+  assert.equal(list.length, 2)
+  assert.deepEqual(list.map((c) => c.body), ['再現できました', '私も確認しました'])
+})
+
+test('POST /reports/:id/comments requires membership, rejects an empty body, and 404s for an unknown report', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const unauth = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'hi' }),
+  })
+  assert.equal(unauth.status, 401)
+
+  const stranger = await createAuthCookie()
+  const strangerRes = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: stranger.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'hi' }),
+  })
+  assert.equal(strangerRes.status, 404)
+
+  const empty = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '   ' }),
+  })
+  assert.equal(empty.status, 400)
+
+  const unknown = await fetch(`${getBaseUrl()}/reports/999999/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'hi' }),
+  })
+  assert.equal(unknown.status, 404)
+})
+
+test('GET /reports/:id/comments requires membership and 404s for an unknown report', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  uploadedFiles.push(created.videoUrl)
+
+  const unauth = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`)
+  assert.equal(unauth.status, 401)
+
+  const stranger = await createAuthCookie()
+  const strangerRes = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    headers: { Cookie: stranger.cookie },
+  })
+  assert.equal(strangerRes.status, 404)
+
+  const unknown = await fetch(`${getBaseUrl()}/reports/999999/comments`, { headers: { Cookie: owner.cookie } })
+  assert.equal(unknown.status, 404)
+})
+
+test('DELETE /reports/:id also removes its comments', async () => {
+  const owner = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const created = await (await postReportForm()).json()
+  await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'コメント' }),
+  })
+
+  await fetch(`${getBaseUrl()}/reports/${created.id}`, { method: 'DELETE', headers: { Cookie: owner.cookie } })
+
+  const after = await fetch(`${getBaseUrl()}/reports/${created.id}/comments`, { headers: { Cookie: owner.cookie } })
+  assert.equal(after.status, 404) // 報告自体が無いので404（bugIndexも消えているため）
+})

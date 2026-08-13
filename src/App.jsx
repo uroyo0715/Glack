@@ -27,6 +27,8 @@ import {
   deleteReport,
   createManualReport,
   attachReportVideo,
+  fetchReportComments,
+  createReportComment,
   loginWithGoogle,
   logout,
   me,
@@ -561,6 +563,8 @@ function AppShell({ user, setUser }) {
               onUpdateReport={handleUpdateReport}
               onAttachVideo={handleAttachVideo}
               onDeleteReport={handleDeleteReport}
+              onFetchComments={fetchReportComments}
+              onCreateComment={createReportComment}
               buildOptions={reportFacets.builds}
               hiddenFieldOptions={selectedProject?.hiddenFieldOptions}
               customFieldOptions={selectedProject?.customFieldOptions}

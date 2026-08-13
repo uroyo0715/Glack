@@ -35,4 +35,14 @@
  * }} Bug
  */
 
+/**
+ * @typedef {Object} Comment
+ * @property {number} id
+ * @property {number} bugId
+ * @property {string} authorEmail
+ * @property {string} authorDisplayName - 投稿時点の表示名のスナップショット
+ * @property {string} body
+ * @property {string} createdAt
+ */
+
 export {}
