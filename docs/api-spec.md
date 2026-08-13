@@ -188,6 +188,9 @@ Query params: `status`, `tag`, `priority`, `platform`, `build`, `who`, `assignee
 `GET /reports/facets`で取得した既存値からのプルダウン選択にしている（表記ゆれで
 検索漏れが起きやすいため）。
 
+`assignee`に予約値`__unassigned__`（`UNASSIGNED_FILTER_VALUE`, `server/src/data.js`）を渡すと、
+「未割り当て（`assignee === ''`）」で絞り込める。実際の対応者名として使われることは無い前提の値。
+
 Response: `Bug[]`（`inputs`は含めない軽量版でよい。一覧では不要なため）
 
 ```ts

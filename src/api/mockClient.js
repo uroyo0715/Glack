@@ -1,4 +1,4 @@
-import { bugs as seedBugs, TAG_OPTIONS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
+import { bugs as seedBugs, TAG_OPTIONS, PRIORITY_OPTIONS, UNASSIGNED_FILTER_VALUE } from '../data/mockBugs.js'
 import { projects as seedProjects } from '../data/mockProjects.js'
 
 const TAG_LABELS = Object.fromEntries(TAG_OPTIONS.map((t) => [t.key, t.label]))
@@ -321,7 +321,8 @@ export async function fetchReports(filters = {}) {
   if (filters.platform) result = result.filter((b) => b.platform === filters.platform)
   if (filters.build) result = result.filter((b) => b.build === filters.build)
   if (filters.who) result = result.filter((b) => b.who === filters.who)
-  if (filters.assignee) result = result.filter((b) => b.assignee === filters.assignee)
+  if (filters.assignee === UNASSIGNED_FILTER_VALUE) result = result.filter((b) => !b.assignee)
+  else if (filters.assignee) result = result.filter((b) => b.assignee === filters.assignee)
   if (filters.q) {
     const q = filters.q.toLowerCase()
     result = result.filter(

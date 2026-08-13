@@ -100,6 +100,14 @@ describe('FilterBar', () => {
     expect(props.setAssigneeFilter).toHaveBeenCalledWith('yamada_dev')
   })
 
+  it('lets the user filter by 未割り当て (unassigned)', async () => {
+    const user = userEvent.setup()
+    const props = setup()
+
+    await user.selectOptions(screen.getByDisplayValue('対応者: すべて'), '未割り当て')
+    expect(props.setAssigneeFilter).toHaveBeenCalledWith('__unassigned__')
+  })
+
   it('does not render a chip for a tag hidden via hiddenFieldOptions', () => {
     setup({ hiddenFieldOptions: { tag: [TEST_TAGS[0]], priority: [], platform: [] } })
     expect(screen.queryByRole('button', { name: TEST_TAGS[0] })).not.toBeInTheDocument()

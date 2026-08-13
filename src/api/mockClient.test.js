@@ -62,6 +62,23 @@ describe('mockClient reports', () => {
     expect(byUnknownProject).toEqual([])
   })
 
+  it('fetchReports filters by assignee, including the __unassigned__ sentinel', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const all = await client.fetchReports()
+    const [target] = all
+    await client.updateReportFields(target.id, { assignee: 'yamada_dev' })
+
+    const byAssignee = await client.fetchReports({ assignee: 'yamada_dev' })
+    expect(byAssignee.some((b) => b.id === target.id)).toBe(true)
+    expect(byAssignee.every((b) => b.assignee === 'yamada_dev')).toBe(true)
+
+    const unassigned = await client.fetchReports({ assignee: '__unassigned__' })
+    expect(unassigned.every((b) => !b.assignee)).toBe(true)
+    expect(unassigned.some((b) => b.id === target.id)).toBe(false)
+  })
+
   it('fetchReport returns the full bug (including inputs) and rejects unknown ids', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()

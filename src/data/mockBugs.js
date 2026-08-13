@@ -218,3 +218,8 @@ export const PRIORITY_OPTIONS = [
 ]
 
 export const PLATFORM_OPTIONS = ['PC', 'PlayStation', 'Switch', 'Switch2', 'Xbox']
+
+// 「対応者」フィルターで「未割り当て（assignee === ''）」を選べるようにするための予約値。
+// 実際の対応者名と衝突しないよう、サーバー側(server/src/data.js の UNASSIGNED_FILTER_VALUE)と
+// 同じ値に合わせること。
+export const UNASSIGNED_FILTER_VALUE = '__unassigned__'

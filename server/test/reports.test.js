@@ -116,6 +116,35 @@ test('GET /reports filters by assignee, and GET /reports/facets lists assignees 
   assert.deepEqual(facets.assignees, ['yamada_dev'])
 })
 
+test('GET /reports filters by assignee=__unassigned__ to find reports with no assignee', async () => {
+  const { cookie } = await createAuthCookie({ email: PROJECT_OWNER_EMAIL })
+  const unassignedProject = await createManagedProject({
+    name: '未割り当てフィルタ用',
+    imageUrl: null,
+    creatorEmail: PROJECT_OWNER_EMAIL,
+  })
+
+  const unassignedBug = await (await postReportForm({ projectId: unassignedProject.id })).json()
+  uploadedFiles.push(unassignedBug.videoUrl)
+  const assignedBug = await (await postReportForm({ projectId: unassignedProject.id })).json()
+  uploadedFiles.push(assignedBug.videoUrl)
+  await fetch(`${getBaseUrl()}/reports/${assignedBug.id}`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assignee: 'yamada_dev' }),
+  })
+
+  const res = await fetch(
+    `${getBaseUrl()}/reports?projectId=${unassignedProject.id}&assignee=__unassigned__`,
+    { headers: { Cookie: cookie } }
+  )
+  assert.equal(res.status, 200)
+  const results = await res.json()
+  assert.ok(results.every((b) => b.assignee === ''))
+  assert.ok(results.some((b) => b.id === unassignedBug.id))
+  assert.ok(!results.some((b) => b.id === assignedBug.id))
+})
+
 test('POST /reports creates a bug with valid data (no API key configured)', async () => {
   delete process.env.GLANK_API_KEY
   const res = await postReportForm()

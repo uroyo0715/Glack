@@ -14,6 +14,11 @@ export function resolveTagLabel(tag) {
   return TAG_LABELS[tag] ?? tag
 }
 
+// GET /reports の assignee クエリパラメータにこの値を渡すと「未割り当て（assignee === ''）」で
+// 絞り込む。実際の対応者名と衝突しないよう、通常ありえない予約語にしている
+// （フロント側 src/components/FilterBar.jsx の同名の定数と値を合わせること）。
+export const UNASSIGNED_FILTER_VALUE = '__unassigned__'
+
 function parseTags(raw) {
   try {
     const parsed = JSON.parse(raw ?? '[]')
@@ -101,7 +106,9 @@ export async function listBugs(
     sql += ' AND who = ?'
     args.push(who)
   }
-  if (assignee) {
+  if (assignee === UNASSIGNED_FILTER_VALUE) {
+    sql += " AND assignee = ''"
+  } else if (assignee) {
     sql += ' AND assignee = ?'
     args.push(assignee)
   }

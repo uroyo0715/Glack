@@ -1,5 +1,5 @@
 import React from 'react'
-import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS } from '../data/mockBugs.js'
+import { STATUS_COLUMNS, TAG_OPTIONS, PRIORITY_OPTIONS, UNASSIGNED_FILTER_VALUE } from '../data/mockBugs.js'
 
 const TAG_LABELS = Object.fromEntries(TAG_OPTIONS.map((t) => [t.key, t.label]))
 
@@ -81,6 +81,7 @@ export default function FilterBar({
         onChange={(e) => setAssigneeFilter(e.target.value)}
       >
         <option value="">対応者: すべて</option>
+        <option value={UNASSIGNED_FILTER_VALUE}>未割り当て</option>
         {(reportFacets.assignees ?? []).map((a) => (
           <option key={a} value={a}>
             {a}
