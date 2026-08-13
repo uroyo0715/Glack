@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { fetchSavedStorageConfigs, applySavedStorageConfig } from '../api/index.js'
 
 const EMPTY_TURSO = { url: '', authToken: '' }
 const EMPTY_R2 = { accountId: '', accessKeyId: '', secretAccessKey: '', bucket: '', publicUrl: '' }
@@ -20,6 +21,11 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
   const [r2Saving, setR2Saving] = useState(false)
   const [r2Error, setR2Error] = useState(null)
 
+  // 自分が過去に設定したTurso/R2接続情報（他人の設定は決して含まれない。他メンバーには呼び出せない）。
+  const [savedConfigs, setSavedConfigs] = useState([])
+  const [applyingId, setApplyingId] = useState(null)
+  const [applyError, setApplyError] = useState(null)
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -38,6 +44,27 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
       cancelled = true
     }
   }, [projectId, onFetchStatus])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSavedStorageConfigs(projectId)
+      .then((result) => {
+        if (!cancelled) setSavedConfigs(result)
+      })
+      .catch(() => {}) // 呼び出せる保存済み設定が無くても致命的ではないので静かに諦める
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
+  function handleApplySaved(savedConfigId) {
+    setApplyingId(savedConfigId)
+    setApplyError(null)
+    applySavedStorageConfig(projectId, savedConfigId)
+      .then((result) => setStatus(result))
+      .catch((err) => setApplyError(err.message ?? String(err)))
+      .finally(() => setApplyingId(null))
+  }
 
   function handleModeChange(nextMode) {
     setModeSaving(true)
@@ -104,6 +131,9 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
           Turso・R2の設定方法はこちら
         </Link>
       </p>
+      {status.configuredByName && (
+        <p className="storage-configured-by">設定者: {status.configuredByName}</p>
+      )}
 
       <div className="storage-mode-toggle">
         <label className={`storage-mode-option ${isSelfHosted ? 'active' : ''}`}>
@@ -137,6 +167,31 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
       {isSelfHosted && !status.tursoConfigured && (
         <div className="storage-blocking-hint">
           データベース（Turso）が未設定のため、このプロジェクトの報告機能はまだ使えません。下のフォームから設定してください。
+        </div>
+      )}
+
+      {isSelfHosted && savedConfigs.length > 0 && (
+        <div className="storage-saved-configs">
+          <div className="members-panel-label">保存済みの設定から呼び出す</div>
+          <p className="storage-panel-hint">
+            自分が過去に設定したTurso・R2の接続情報だけが表示されます（他のメンバーが設定したものは
+            呼び出せません）。
+          </p>
+          <ul className="storage-saved-configs-list">
+            {savedConfigs.map((c) => (
+              <li key={c.id} className="storage-saved-config-item">
+                <span className="storage-saved-config-tag">ストレージ設定者（{c.sourceProjectName}）</span>
+                <button
+                  type="button"
+                  disabled={applyingId === c.id}
+                  onClick={() => handleApplySaved(c.id)}
+                >
+                  {applyingId === c.id ? '適用中...' : 'この設定を適用'}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {applyError && <div className="project-form-error">{applyError}</div>}
         </div>
       )}
 

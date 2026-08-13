@@ -338,3 +338,70 @@ describe('mockClient project members', () => {
     await expect(client.addProjectMembers(1, ['a@example.com'])).rejects.toThrow('login required')
   })
 })
+
+describe('mockClient saved storage configs', () => {
+  it('updateProjectStorage records configuredByName and saves a recallable config', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const [sourceProject] = await client.fetchProjects()
+    const otherProject = await client.createProject('別プロジェクト', null, '')
+
+    const updated = await client.updateProjectStorage(sourceProject.id, {
+      turso: { url: 'libsql://x.turso.io', authToken: 't' },
+      r2: {
+        accountId: 'a',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        bucket: 'b',
+        publicUrl: 'https://pub-x.r2.dev',
+      },
+    })
+    expect(updated.configuredByName).toBe('デモユーザー')
+
+    // 設定したプロジェクト自身は「呼び出せる設定」の一覧からは除かれる
+    const ownList = await client.fetchSavedStorageConfigs(sourceProject.id)
+    expect(ownList).toEqual([])
+
+    // 別のプロジェクトからは呼び出せる
+    const otherList = await client.fetchSavedStorageConfigs(otherProject.id)
+    expect(otherList).toHaveLength(1)
+    expect(otherList[0]).toMatchObject({
+      sourceProjectId: sourceProject.id,
+      sourceProjectName: sourceProject.name,
+      hasTurso: true,
+      hasR2: true,
+    })
+  })
+
+  it('applySavedStorageConfig copies the saved config into the target project', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const [sourceProject] = await client.fetchProjects()
+    const otherProject = await client.createProject('適用先プロジェクト', null, '')
+    await client.updateProjectStorage(sourceProject.id, {
+      turso: { url: 'libsql://x.turso.io', authToken: 't' },
+    })
+
+    const [saved] = await client.fetchSavedStorageConfigs(otherProject.id)
+    const applied = await client.applySavedStorageConfig(otherProject.id, saved.id)
+    expect(applied.tursoConfigured).toBe(true)
+    expect(applied.configuredByName).toBe('デモユーザー')
+  })
+
+  it('applySavedStorageConfig rejects an unknown savedConfigId', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const [project] = await client.fetchProjects()
+    await expect(client.applySavedStorageConfig(project.id, 99999)).rejects.toThrow(
+      'saved storage config not found'
+    )
+  })
+
+  it('fetchSavedStorageConfigs/applySavedStorageConfig require login', async () => {
+    const client = await freshClient()
+    await expect(client.fetchSavedStorageConfigs(1)).rejects.toThrow('login required')
+    await expect(client.applySavedStorageConfig(1, 1)).rejects.toThrow('login required')
+  })
+})

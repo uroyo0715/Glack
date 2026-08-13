@@ -156,6 +156,37 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
 }
 
 /**
+ * ログイン中の自分が過去に設定したTurso/R2接続情報の一覧（このプロジェクト自身の分は除く）。
+ * 他メンバーが設定したものは含まれない。
+ * @returns {Promise<{id: number, sourceProjectId: number, sourceProjectName: string, hasTurso: boolean, hasR2: boolean, updatedAt: string}[]>}
+ */
+export async function fetchSavedStorageConfigs(projectId) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage/saved-configs`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(`fetchSavedStorageConfigs failed: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * 自分が過去に設定した接続情報を、このプロジェクトにそのまま適用する。
+ * @returns {Promise<{storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName}>}
+ */
+export async function applySavedStorageConfig(projectId, savedConfigId) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ savedConfigId }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `applySavedStorageConfig failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
  * 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは使わないプリセット項目を
  * 非表示にする設定。渡さなかったフィールドは変更しない（部分更新）。
  * @returns {Promise<{tag: string[], priority: string[], platform: string[]}>}

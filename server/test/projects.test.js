@@ -287,6 +287,7 @@ test('a new project defaults to storageMode self_hosted, unconfigured, and manag
     isManagedAllowed: true,
     tursoConfigured: false,
     r2Configured: false,
+    configuredByName: null,
   })
 })
 
@@ -397,6 +398,116 @@ test('PATCH /projects/:id/storage validates turso/r2 field shapes', async () => 
     body: JSON.stringify({ r2: { accountId: 'a' } }),
   })
   assert.equal(badR2.status, 400)
+})
+
+test('PATCH /projects/:id/storage records who configured it', async () => {
+  const owner = await createAuthCookie({ name: '設定太郎' })
+  const project = await createProjectAs(owner.cookie, '設定者記録テスト')
+  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-configured-by-${crypto.randomUUID()}.sqlite`)}`
+
+  const res = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turso: { url: tursoUrl, authToken: 'unused' } }),
+  })
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).configuredByName, '設定太郎')
+})
+
+test('saved storage configs can be recalled by the same owner on another project, but not by other members', async () => {
+  const owner = await createAuthCookie({ name: '呼び出し花子' })
+  const teammate = await createAuthCookie()
+  const stranger = await createAuthCookie()
+
+  const sourceProject = await createProjectAs(owner.cookie, '呼び出し元プロジェクト')
+  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-saved-${crypto.randomUUID()}.sqlite`)}`
+  const savePatch = await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      turso: { url: tursoUrl, authToken: 'unused' },
+      r2: {
+        accountId: 'acc',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        bucket: 'bucket',
+        publicUrl: 'https://pub-example.r2.dev',
+      },
+    }),
+  })
+  assert.equal(savePatch.status, 200)
+
+  const targetProject = await createProjectAs(owner.cookie, '適用先プロジェクト')
+  await fetch(`${getBaseUrl()}/projects/${targetProject.id}/members`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails: [teammate.user.email] }),
+  })
+
+  // 設定した本人には、そのプロジェクト以外の場所で呼び出せる設定として見える
+  const ownList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
+    headers: { Cookie: owner.cookie },
+  })
+  assert.equal(ownList.status, 200)
+  const ownConfigs = await ownList.json()
+  assert.equal(ownConfigs.length, 1)
+  assert.equal(ownConfigs[0].sourceProjectId, sourceProject.id)
+  assert.equal(ownConfigs[0].sourceProjectName, '呼び出し元プロジェクト')
+  assert.equal(ownConfigs[0].hasTurso, true)
+  assert.equal(ownConfigs[0].hasR2, true)
+
+  // 同じプロジェクトの他メンバーには、他人（owner）が設定したものは一切見えない
+  const teammateList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
+    headers: { Cookie: teammate.cookie },
+  })
+  assert.equal(teammateList.status, 200)
+  assert.deepEqual(await teammateList.json(), [])
+
+  // メンバーでない第三者は一覧取得自体ができない
+  const strangerList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
+    headers: { Cookie: stranger.cookie },
+  })
+  assert.equal(strangerList.status, 404)
+
+  // 本人がapply-savedで適用すると、対象プロジェクトに接続情報がコピーされ、設定者名も本人になる
+  const applyRes = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ savedConfigId: ownConfigs[0].id }),
+  })
+  assert.equal(applyRes.status, 200)
+  const applied = await applyRes.json()
+  assert.equal(applied.tursoConfigured, true)
+  assert.equal(applied.r2Configured, true)
+  assert.equal(applied.configuredByName, '呼び出し花子')
+
+  // 他メンバーが同じsavedConfigIdを指定しても、自分の所有物ではないため404
+  const teammateApply = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { Cookie: teammate.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ savedConfigId: ownConfigs[0].id }),
+  })
+  assert.equal(teammateApply.status, 404)
+})
+
+test('POST /projects/:id/storage/apply-saved validates the body and requires membership', async () => {
+  const owner = await createAuthCookie()
+  const stranger = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, 'apply-saved検証テスト')
+
+  const badBody = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  assert.equal(badBody.status, 400)
+
+  const strangerRes = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { Cookie: stranger.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ savedConfigId: 1 }),
+  })
+  assert.equal(strangerRes.status, 404)
 })
 
 test('new project defaults to no hidden field options', async () => {

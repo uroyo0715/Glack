@@ -134,6 +134,7 @@ export function toStorageStatus(project) {
     isManagedAllowed: Boolean(project.isManagedAllowed),
     tursoConfigured: Boolean(project.tursoConfigEnc),
     r2Configured: Boolean(project.r2ConfigEnc),
+    configuredByName: project.storageConfiguredByName ?? null,
   }
 }
 

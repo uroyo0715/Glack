@@ -32,9 +32,40 @@ const membersByProject = new Map(
 const storageByProject = new Map(
   projects.map((p) => [
     p.id,
-    { storageMode: 'managed', isManagedAllowed: true, tursoConfigured: true, r2Configured: true },
+    { storageMode: 'managed', isManagedAllowed: true, tursoConfigured: true, r2Configured: true, configuredByName: null },
   ])
 )
+
+// ログインユーザーが過去に設定したTurso/R2接続情報の一覧（実バックエンドのsavedStorageConfigs相当）。
+// {id, ownerEmail, sourceProjectId, sourceProjectName, hasTurso, hasR2, updatedAt}[]
+let savedStorageConfigs = []
+let nextSavedStorageConfigId = 1
+
+function upsertMockSavedStorageConfig(projectId, { hasTurso, hasR2 }) {
+  const project = projects.find((p) => p.id === projectId)
+  const existing = savedStorageConfigs.find(
+    (c) => c.ownerEmail === currentUser.email && c.sourceProjectId === projectId
+  )
+  if (existing) {
+    if (hasTurso !== undefined) existing.hasTurso = hasTurso
+    if (hasR2 !== undefined) existing.hasR2 = hasR2
+    existing.sourceProjectName = project?.name ?? existing.sourceProjectName
+    existing.updatedAt = new Date().toISOString()
+  } else {
+    savedStorageConfigs = [
+      ...savedStorageConfigs,
+      {
+        id: nextSavedStorageConfigId++,
+        ownerEmail: currentUser.email,
+        sourceProjectId: projectId,
+        sourceProjectName: project?.name ?? '',
+        hasTurso: Boolean(hasTurso),
+        hasR2: Boolean(hasR2),
+        updatedAt: new Date().toISOString(),
+      },
+    ]
+  }
+}
 
 // projectId -> { tag: string[], priority: string[], platform: string[] }。非表示にしたプリセット項目。
 const fieldOptionsByProject = new Map(
@@ -131,6 +162,7 @@ export async function createProject(name, imageFile, gameEngine) {
     isManagedAllowed: true,
     tursoConfigured: false,
     r2Configured: false,
+    configuredByName: null,
   })
   fieldOptionsByProject.set(project.id, { tag: [], priority: [], platform: [] })
   customFieldOptionsByProject.set(project.id, { tag: [], platform: [] })
@@ -264,7 +296,50 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
     if (missing.length > 0) throw new Error(`r2 missing fields: ${missing.join(', ')}`)
     current.r2Configured = true
   }
+  if (turso != null || r2 != null) {
+    current.configuredByName = currentUser.displayName
+    upsertMockSavedStorageConfig(id, {
+      hasTurso: turso != null ? true : undefined,
+      hasR2: r2 != null ? true : undefined,
+    })
+  }
   storageByProject.set(id, current)
+  return { ...current }
+}
+
+/**
+ * ログイン中の自分が過去に設定したTurso/R2接続情報の一覧（このプロジェクト自身の分は除く）。
+ * @returns {Promise<{id: number, sourceProjectId: number, sourceProjectName: string, hasTurso: boolean, hasR2: boolean, updatedAt: string}[]>}
+ */
+export async function fetchSavedStorageConfigs(projectId) {
+  await delay(80)
+  requireLogin()
+  const id = Number(projectId)
+  return savedStorageConfigs
+    .filter((c) => c.ownerEmail === currentUser.email && c.sourceProjectId !== id)
+    .map(({ ownerEmail, ...rest }) => rest)
+}
+
+/** @returns {Promise<{storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName}>} */
+export async function applySavedStorageConfig(projectId, savedConfigId) {
+  await delay(150)
+  requireLogin()
+  const id = Number(projectId)
+  const saved = savedStorageConfigs.find(
+    (c) => c.id === savedConfigId && c.ownerEmail === currentUser.email
+  )
+  if (!saved) throw new Error('saved storage config not found')
+  const current = storageByProject.get(id)
+  if (!current) throw new Error(`applySavedStorageConfig: unknown project ${projectId}`)
+
+  if (saved.hasTurso) current.tursoConfigured = true
+  if (saved.hasR2) current.r2Configured = true
+  current.configuredByName = currentUser.displayName
+  storageByProject.set(id, current)
+  upsertMockSavedStorageConfig(id, {
+    hasTurso: saved.hasTurso ? true : undefined,
+    hasR2: saved.hasR2 ? true : undefined,
+  })
   return { ...current }
 }
 

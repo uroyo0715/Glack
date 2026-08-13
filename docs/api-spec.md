@@ -158,10 +158,29 @@ self_hosted接続情報（Tursoの`url`/`authToken`、R2の各値）はAES-256-G
 DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由で平文では読み出せない
 （設定済みかどうかの真偽値だけを返す）。
 
-- `GET /projects/:id/storage` — `{ storageMode, isManagedAllowed, tursoConfigured, r2Configured }`を返す。非メンバーは`404`。
+- `GET /projects/:id/storage` — `{ storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName }`
+  を返す。非メンバーは`404`。`configuredByName`はTurso/R2を最後に設定した人の表示名
+  （誰も設定していなければ`null`）。
 - `PATCH /projects/:id/storage` — body: `{ storageMode?, turso?: { url, authToken }, r2?: {...} }`。
   渡したフィールドだけ更新する部分更新。`storageMode: 'managed'`は`isManagedAllowed`が
-  falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。
+  falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。`turso`/`r2`を
+  渡すと、その接続情報を入力した本人（ログインユーザー）が「設定者」として記録され、
+  下記の`savedStorageConfigs`にもその人専用の呼び出し可能な設定として保存される。
+
+##### 保存済み設定の呼び出し（呼び出せるのは設定した本人のみ）
+
+一度あるプロジェクトでTurso/R2を設定すると、その接続情報は設定した本人のアカウントに
+紐づけて保存され（`savedStorageConfigs`テーブル、`ownerEmail`単位）、別のプロジェクトの
+ストレージ設定時に選んで適用できる。`ownerEmail`で厳密に絞り込むため、**他のメンバーは
+自分以外が設定した接続情報を一覧にも取得にも呼び出せない**（プロジェクトメンバーであることは
+前提として要求するが、それだけでは他人の保存済み設定は見えない）。
+
+- `GET /projects/:id/storage/saved-configs` — ログイン中の自分が過去に設定した接続情報の一覧
+  （`:id`のプロジェクト自身の分は除く）。各要素: `{ id, sourceProjectId, sourceProjectName, hasTurso, hasR2, updatedAt }`。
+  秘密の値自体は含まない。非メンバーは`404`。
+- `POST /projects/:id/storage/apply-saved` — body: `{ savedConfigId }`。指定した保存済み設定
+  （自分が所有するものに限る。他人のIDを指定しても`404`）を`:id`のプロジェクトにコピーして適用する。
+  レスポンス形は`GET /projects/:id/storage`と同じ。
 
 #### 3.0.7 選択肢の管理（タグ・優先度・プラットフォームのプリセット非表示）
 

@@ -143,6 +143,22 @@ await db.executeMultiple(`
     projectId INTEGER PRIMARY KEY REFERENCES projects(id),
     bytesUsed INTEGER NOT NULL DEFAULT 0
   );
+
+  -- あるユーザーが過去にプロジェクトへ設定したTurso/R2接続情報を、別のプロジェクトの設定時に
+  -- 呼び出せるようにするための保存先。ownerEmailが「設定した本人」で、この本人以外は
+  -- 一覧にも取得にも出てこない（他メンバーが人の接続情報を呼び出せないようにするための境界）。
+  -- (ownerEmail, sourceProjectId)一意: 同じ人が同じプロジェクトで設定し直すたびに上書きする
+  -- （履歴は持たず常に最新の1件のみ）。
+  CREATE TABLE IF NOT EXISTS savedStorageConfigs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ownerEmail TEXT NOT NULL,
+    sourceProjectId INTEGER NOT NULL,
+    sourceProjectName TEXT NOT NULL,
+    tursoConfigEnc TEXT,
+    r2ConfigEnc TEXT,
+    updatedAt TEXT NOT NULL,
+    UNIQUE(ownerEmail, sourceProjectId)
+  );
 `)
 
 // マイグレーション: このカラム群を導入する前に作られたDBには存在しないため追加する。
@@ -248,6 +264,18 @@ async function migrateAddGameEngineIfNeeded() {
 }
 
 await migrateAddGameEngineIfNeeded()
+
+// マイグレーション: ストレージ設定者(storageConfiguredByEmail/Name)導入前に作られたDBには
+// 存在しないため追加する。
+async function migrateAddStorageConfiguredByIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(projects)')
+  const hasColumn = columns.some((c) => c.name === 'storageConfiguredByEmail')
+  if (hasColumn) return
+  await db.execute('ALTER TABLE projects ADD COLUMN storageConfiguredByEmail TEXT')
+  await db.execute('ALTER TABLE projects ADD COLUMN storageConfiguredByName TEXT')
+}
+
+await migrateAddStorageConfiguredByIfNeeded()
 
 // マイグレーション: 1件のバグ報告に1つだけだった「種類」(tag/tagLabel列)を、複数付けられる
 // tags列（JSON配列の文字列）に置き換える。ラベルはTAG_LABELS（server/src/data.js）から

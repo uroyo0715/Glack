@@ -20,6 +20,9 @@ import {
   updateProjectName,
   updateProjectGameEngine,
   GAME_ENGINE_LABELS,
+  listSavedStorageConfigsForOwner,
+  getSavedStorageConfigForOwner,
+  upsertSavedStorageConfig,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -322,7 +325,82 @@ router.patch(
       })
     }
 
+    // 接続情報を実際に入力した本人だけが、後で「呼び出せる設定」として使える。
+    if (turso != null || r2 != null) {
+      update.storageConfiguredByEmail = req.user.email
+      update.storageConfiguredByName = req.user.displayName
+    }
+
     const updated = await updateProjectStorageConfig(projectId, update)
+
+    if (turso != null || r2 != null) {
+      await upsertSavedStorageConfig({
+        ownerEmail: req.user.email,
+        sourceProjectId: projectId,
+        sourceProjectName: updated.name,
+        tursoConfigEnc: turso != null ? update.tursoConfigEnc : undefined,
+        r2ConfigEnc: r2 != null ? update.r2ConfigEnc : undefined,
+      })
+    }
+
+    invalidateProjectDataClientCache(projectId)
+    res.json(toStorageStatus(updated))
+  })
+)
+
+// 自分が過去に設定したTurso/R2接続情報の一覧（他メンバーの設定は決して見えない）。
+router.get(
+  '/projects/:id/storage/saved-configs',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const configs = await listSavedStorageConfigsForOwner(req.user.email, projectId)
+    res.json(configs)
+  })
+)
+
+// 自分が過去に設定した接続情報を、このプロジェクトにそのまま適用する。
+router.post(
+  '/projects/:id/storage/apply-saved',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.id)
+    if (!(await isProjectMember(projectId, req.user.email))) {
+      return res.status(404).json({ error: 'not found' })
+    }
+    const { savedConfigId } = req.body ?? {}
+    if (!Number.isInteger(savedConfigId)) {
+      return res.status(400).json({ error: 'savedConfigId is required' })
+    }
+
+    // ownerEmailで絞り込むため、他人のsavedConfigIdを指定しても取得できない
+    // （＝他メンバーの接続情報を呼び出せない、という制約はここで担保される）。
+    const saved = await getSavedStorageConfigForOwner(savedConfigId, req.user.email)
+    if (!saved) {
+      return res.status(404).json({ error: 'saved storage config not found' })
+    }
+
+    const project = await getProjectRaw(projectId)
+    const update = {
+      storageConfiguredByEmail: req.user.email,
+      storageConfiguredByName: req.user.displayName,
+    }
+    if (saved.tursoConfigEnc) update.tursoConfigEnc = saved.tursoConfigEnc
+    if (saved.r2ConfigEnc) update.r2ConfigEnc = saved.r2ConfigEnc
+
+    const updated = await updateProjectStorageConfig(projectId, update)
+
+    await upsertSavedStorageConfig({
+      ownerEmail: req.user.email,
+      sourceProjectId: projectId,
+      sourceProjectName: updated.name,
+      tursoConfigEnc: saved.tursoConfigEnc ? saved.tursoConfigEnc : undefined,
+      r2ConfigEnc: saved.r2ConfigEnc ? saved.r2ConfigEnc : undefined,
+    })
+
     invalidateProjectDataClientCache(projectId)
     res.json(toStorageStatus(updated))
   })
