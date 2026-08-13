@@ -322,13 +322,12 @@ body {
   cursor: default;
 }
 .project-card-name {
-  padding: 12px 14px;
+  padding: 12px 14px 4px;
   font-weight: 700;
   font-size: 14px;
 }
 .project-card-engine {
-  padding: 0 14px;
-  margin-top: -8px;
+  padding: 0 14px 4px;
   font-size: 11px;
   color: var(--text-dim);
 }
@@ -419,7 +418,6 @@ body {
 }
 .project-card-id {
   padding: 0 14px 12px;
-  margin-top: -8px;
   font-size: 11px;
   color: var(--text-faint);
 }
