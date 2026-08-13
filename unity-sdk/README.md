@@ -25,11 +25,16 @@ Glankへ入力ログ付きバグ報告を送信するための最小SDK。
   `#if ENABLE_INPUT_SYSTEM` で囲ってあるため、Input Systemパッケージを導入していない
   プロジェクトでは単純に無視される（コンパイルエラーにならない）。
 - `BugReportTrigger.cs` — ホットキー（デフォルト `F12`）でバグ報告を送信するサンプル実装。
-  既定では `replayWatcher`（`ReplayFolderWatcher`）が直近の録画ファイルを自動検出する。
-  別の取得方法を使いたい場合は `GetLatestClipPath` に関数を差し込めば上書きできる。
+  動画の取得元は `GetLatestClipPathAsync`（非同期・優先）→ `GetLatestClipPath`（同期）→
+  `replayWatcher`（`ReplayFolderWatcher`、既定のフォールバック）の順で決まる。
   入力ログの取得元も `CaptureInputLog` で差し替え可能（新Input System版を使う場合等）。
-- `ReplayFolderWatcher.cs` — OSのインスタントリプレイ機能が書き出した動画ファイルを検出するヘルパー。
-  Windows/macOS/Linuxそれぞれの一般的な保存先が既定値に入る。詳細は下記「動画録画について」を参照。
+  詳細は下記「動画録画について」を参照。
+- `InstantReplayVideoRecorder.cs` — OSの設定に依存せず、ゲーム自身が直近n秒をリングバッファで
+  保持し、トリガー時にmp4として書き出す（推奨）。`GLANK_INSTANT_REPLAY` スクリプティング定義
+  シンボルを追加した場合のみコンパイルされる。詳細は下記「動画録画について」を参照。
+- `ReplayFolderWatcher.cs` — OSのインスタントリプレイ機能が書き出した動画ファイルを検出するヘルパー
+  （フォールバック用）。Windows/macOS/Linuxそれぞれの一般的な保存先が既定値に入る。
+  詳細は下記「動画録画について」を参照。
 - `GlankClient.cs` — `multipart/form-data` で `video` ファイルと `metadata`（JSON文字列）を
   `POST {baseUrl}/reports` へ送信する。送信結果は成功/再送可能な失敗/恒久的な失敗
   （`GlankSubmitOutcome`）の3種類に分類される。
@@ -45,14 +50,43 @@ Glankへ入力ログ付きバグ報告を送信するための最小SDK。
 
 ## 動画録画について
 
-このSDKは**録画のエンコード自体は行わない**。ゲーム側で常時フル画質の映像バッファを
-メモリに保持し続ける方式は、720p・60fpsで30秒分だけでも数GBのメモリを消費し実行時負荷が
-大きいため採用していない。代わりに、**OSのインスタントリプレイ機能**
-（Windows: Xbox Game Barの背景録画 / NVIDIA ShadowPlay / AMD ReLive）に録画そのものを任せ、
-SDKはそれらが書き出した動画ファイルを検出するだけにしている。GPUのハードウェアエンコーダーで
-既に効率化された仕組みを流用するため、ゲーム本体への負荷はファイル検索のみでほぼゼロ。
+### 推奨: `InstantReplayVideoRecorder`（ゲーム自身がリングバッファで保持）
 
-### 設定手順（Windows / Xbox Game Bar の例）
+**既定の推奨方式は `InstantReplayVideoRecorder` を使うこと。** OS側でXbox Game Bar/ShadowPlay/
+ReLive等を事前に有効化していないプレイヤーの環境では動画が存在しない、という
+`ReplayFolderWatcher`（後述）の弱点を解消するため、ゲーム自身が直近n秒のゲームプレイを
+リングバッファとして保持し、トリガー時にその場でmp4として書き出す。
+
+内部では [InstantReplay for Unity](https://github.com/CyberAgentGameEntertainment/InstantReplay)
+（CyberAgent製、MIT License）を使う。プラットフォームネイティブのハードウェアエンコーダー
+（Windows: Media Foundation / macOS,iOS: VideoToolbox / Android: MediaCodec）を通すため、
+常時バッファし続けてもCPU負荷は小さい。**Linuxのみ、システムにインストール済みのffmpegが必要**
+（PATHに通っている必要がある。配布先の環境に依存するため、Linux版を配布する場合は別途案内が必要）。
+Unity 2022.3以降が必要。
+
+**導入手順:**
+
+1. Unity Package ManagerでInstantReplay本体を追加する
+   （`Window > Package Manager > + > Add package from git URL...`）:
+   ```
+   https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay#release
+   ```
+   （依存パッケージの導入方法を含む詳細はInstantReplay本体のREADMEを参照）
+2. `Project Settings > Player > Scripting Define Symbols` に `GLANK_INSTANT_REPLAY` を追加する
+   （このシンボルが無いと `InstantReplayVideoRecorder.cs` はコンパイルされない。未導入のプロジェクトで
+   コンパイルエラーにならないようにするための明示的なガード）
+3. シーンに `InstantReplayVideoRecorder` をアタッチしたGameObjectを1つ置く
+4. 下記「セットアップ例」の通り `BugReportTrigger.GetLatestClipPathAsync` に配線する
+
+### フォールバック: `ReplayFolderWatcher`（OSのインスタントリプレイ機能に頼る）
+
+`InstantReplayVideoRecorder`を導入しない場合、または導入コストをかけたくない場合向けに、
+従来の方式も引き続き使える。ゲーム側では録画せず、**OSのインスタントリプレイ機能**
+（Windows: Xbox Game Barの背景録画 / NVIDIA ShadowPlay / AMD ReLive）に録画そのものを任せ、
+SDKはそれらが書き出した動画ファイルを検出するだけにする。ゲーム本体への負荷はファイル検索のみで
+ほぼゼロだが、**プレイヤーが事前にOS側の機能を有効化していないと動画が存在しない**という制約がある。
+
+#### 設定手順（Windows / Xbox Game Bar の例）
 
 1. Windowsの設定 > ゲーム > Xbox Game Bar で「プレイ中にバックグラウンドで録画する」を有効にする
 2. キャプチャの設定で録画の長さ（直近何秒を保存するか）を指定する
@@ -64,16 +98,13 @@ SDKはそれらが書き出した動画ファイルを検出するだけにし�
 ShadowPlayやReLiveを使う場合は、それぞれの設定画面で確認した保存先フォルダを
 `replayWatcher.watchFolders` に追加すればよい。
 
-### macOS / Linux について
+#### macOS / Linux について（`ReplayFolderWatcher`使用時）
 
 - **macOS**: `replayWatcher.watchFolders` の既定値は `~/Movies`（QuickTime Playerで
   画面収録した場合の既定保存先）。OBS等を使う場合はその出力フォルダを追加する。
 - **Linux**: OSの機能としての「インスタントリプレイ」に相当するものが無いため、既定値は
   空になっている。OBS Studioの「Replay Buffer」機能などサードパーティのツールを使い、
   その出力フォルダを `replayWatcher.watchFolders` に追加する。
-
-いずれの場合も、`replayWatcher`任せにせず自前の取得方法（外部キャプチャソフト連携等）を
-使いたい場合は `GetLatestClipPath` に差し込めば上書きできる。
 
 **未対応の点**: OSのインスタントリプレイ保存ホットキー（Windowsの`Win+Alt+G`等）と
 `BugReportTrigger`のホットキーの自動連携は行っていない（2つのキーを別々に押す必要がある）。
@@ -82,10 +113,9 @@ OS側のホットキーを自動でシミュレートする実装はプラット
 
 ## セットアップ例
 
-`config` と `inputLogRecorder` をInspectorで割り当てるだけで、動画は
-`replayWatcher` が自動検出するため追加コードは不要（上記「動画録画について」参照）。
-別の録画方法（Unity Recorderや自前のリプレイバッファ等）を使いたい場合のみ、
-`GetLatestClipPath` を差し込んで上書きする。
+`config` と `inputLogRecorder` をInspectorで割り当てるだけで動画も自動で取得される
+（`InstantReplayVideoRecorder`を導入していれば優先的にそちらが、していなければ
+`replayWatcher` がフォールバックとして使われる。上記「動画録画について」参照）。
 
 ```csharp
 using Glank;
@@ -94,17 +124,25 @@ using UnityEngine;
 public class BugReportSetup : MonoBehaviour
 {
     [SerializeField] private BugReportTrigger trigger;
+#if GLANK_INSTANT_REPLAY
+    [SerializeField] private InstantReplayVideoRecorder instantReplay;
+#endif
 
     private void Awake()
     {
-        // 既定のOSインスタントリプレイ検出ではなく、自前のリプレイバッファを使いたい場合のみ差し込む
-        trigger.GetLatestClipPath = () => MyReplayBuffer.Instance.GetLatestClipPath();
+#if GLANK_INSTANT_REPLAY
+        // 導入していれば、OSのインスタントリプレイ検出より優先してこちらを使う
+        trigger.GetLatestClipPathAsync = instantReplay.GetLatestClipPathAsync;
+#else
+        // 独自のリプレイバッファ実装を使いたい場合のみ差し込む（同期版の例）
+        // trigger.GetLatestClipPath = () => MyReplayBuffer.Instance.GetLatestClipPath();
+#endif
     }
 }
 ```
 
-`F12` を押すと、`InputLogRecorder` が保持している直近の入力ログと
-`GetLatestClipPath()` が返す動画ファイルを合わせて `POST /reports` に送信する。
+`F12` を押すと、`InputLogRecorder` が保持している直近の入力ログと、上記の優先順で
+解決された動画ファイルを合わせて `POST /reports` に送信する。
 
 ## 送信失敗時のリトライ（GlankOfflineQueue）
 
@@ -204,12 +242,18 @@ public class PlayerInput : MonoBehaviour
 
 ## 未対応・今後の検討事項
 
+- `InstantReplayVideoRecorder`はLinuxのみ、システムにインストール済みのffmpegが必要
+  （プレイヤー環境依存のため、Linux版を配布する場合は別途案内が必要）
 - OSのインスタントリプレイ保存ホットキー（Win+Alt+G等）と`BugReportTrigger`のホットキーの
-  自動連携（現状は2つのキーを別々に押す必要がある。プラットフォームごとのホットキー
-  シミュレーションは壊れやすいため見送っている。詳細は上記「macOS / Linux について」）
+  自動連携（`ReplayFolderWatcher`使用時のみの制約。現状は2つのキーを別々に押す必要がある。
+  プラットフォームごとのホットキーシミュレーションは壊れやすいため見送っている。詳細は上記
+  「macOS / Linux について」）
 - `GlankReportPromptUI`はロジックのみ提供。実際のCanvas/UI部品の配置はUnity Editor側で
   手動で組む必要がある（テキストファイルのSDKにUnityプレハブ資産を含められないため）
 - `GlankReplayer` はキー入力の再現のみ対応（乱数シードやゲーム内状態までは復元しないため、
   完全に同一の結果を保証するものではない）
 - macOS/Linuxでの`ReplayFolderWatcher`の既定値は実機での動作確認がまだ済んでいない
   （Windows/Xbox Game Barでのみ実地確認済み）
+- `InstantReplayVideoRecorder`・`BugReportTrigger`の非同期パスは実機（実際のUnityビルド環境）
+  での動作確認がまだ済んでいない（このSDKはC#プロジェクトとしてUnity環境の外で開発しているため。
+  依存するInstantReplay本体のAPIはpublicなソースを基に実装しているが、導入後に実機で確認すること）

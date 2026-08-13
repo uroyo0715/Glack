@@ -1,13 +1,18 @@
 using System;
+using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Glank
 {
     /// <summary>
     /// バグ報告のトリガーからAPI送信までを繋ぐサンプル実装。
-    /// 動画の録画自体はSDKの範囲外。既定では <see cref="replayWatcher"/> がOSのインスタントリプレイ
-    /// （Xbox Game Bar / ShadowPlay / ReLive等）の出力フォルダから最新の録画ファイルを探す。
-    /// 別の取得方法を使いたい場合は <see cref="GetLatestClipPath"/> に差し込めば、そちらが優先される。
+    /// 動画の取得元は次の優先順で決まる。
+    ///   1. <see cref="GetLatestClipPathAsync"/>（例: <see cref="InstantReplayVideoRecorder"/> のような、
+    ///      ゲーム自身がリングバッファで保持している映像をその場でmp4に書き出す方式。OS側の設定に依存しない）
+    ///   2. <see cref="GetLatestClipPath"/>（同期版。自前の取得処理を差し込みたい場合用）
+    ///   3. <see cref="replayWatcher"/>（既定値。OSのインスタントリプレイ機能の出力フォルダから
+    ///      最新の録画ファイルを探すフォールバック。プレイヤー側でXbox Game Bar等を有効化している場合のみ機能する）
     /// </summary>
     public class BugReportTrigger : MonoBehaviour
     {
@@ -27,8 +32,15 @@ namespace Glank
         [SerializeField] private GlankReportPromptUI promptUI;
 
         /// <summary>
-        /// 直近の録画クリップのファイルパスを返す関数。未設定の場合は <see cref="replayWatcher"/> を使う。
-        /// Unity Recorderや自前のキャプチャ処理を使いたい場合はここに差し込んで上書きできる。
+        /// 直近の録画クリップのファイルパスを非同期に返す関数（優先度最高）。
+        /// <see cref="InstantReplayVideoRecorder.GetLatestClipPathAsync"/> のように、リングバッファから
+        /// その場でmp4を書き出すような、完了までフレームをまたぐ処理を差し込む場合に使う。
+        /// </summary>
+        public Func<Task<string>> GetLatestClipPathAsync;
+
+        /// <summary>
+        /// 直近の録画クリップのファイルパスを返す関数（同期版）。<see cref="GetLatestClipPathAsync"/>が
+        /// 未設定の場合に使う。どちらも未設定なら <see cref="replayWatcher"/> を使う。
         /// </summary>
         public Func<string> GetLatestClipPath;
 
@@ -67,16 +79,8 @@ namespace Glank
                 return;
             }
 
-            string videoPath = GetLatestClipPath != null ? GetLatestClipPath.Invoke() : replayWatcher.FindLatestClip();
-            if (string.IsNullOrEmpty(videoPath))
-            {
-                Debug.LogWarning(
-                    "[Glank] 録画ファイルが見つかりません。OSのインスタントリプレイ機能（Xbox Game Bar等）で" +
-                    "直近の録画を保存してから再度お試しください。送信を中止しました。"
-                );
-                return;
-            }
-
+            // 入力ログはトリガーの瞬間（この時点）でキャプチャする。動画の書き出し待ち（非同期の場合）の間に
+            // リングバッファが進んでしまい、動画と噛み合わなくなるのを防ぐため。
             var snapshot = CaptureInputLog != null ? CaptureInputLog.Invoke() : inputLogRecorder.Capture();
             var metadata = new ReportMetadata
             {
@@ -93,7 +97,40 @@ namespace Glank
                 inputs = snapshot.inputs,
             };
 
-            StartCoroutine(GlankClient.SubmitReport(config, metadata, videoPath, (outcome, message) =>
+            StartCoroutine(SubmitReportCoroutine(metadata));
+        }
+
+        private IEnumerator SubmitReportCoroutine(ReportMetadata metadata)
+        {
+            string videoPath = null;
+
+            if (GetLatestClipPathAsync != null)
+            {
+                var task = GetLatestClipPathAsync.Invoke();
+                while (!task.IsCompleted) yield return null;
+
+                if (task.IsFaulted)
+                {
+                    Debug.LogError($"[Glank] 動画の書き出しに失敗しました: {task.Exception?.GetBaseException().Message}");
+                    yield break;
+                }
+                videoPath = task.Result;
+            }
+            else
+            {
+                videoPath = GetLatestClipPath != null ? GetLatestClipPath.Invoke() : replayWatcher.FindLatestClip();
+            }
+
+            if (string.IsNullOrEmpty(videoPath))
+            {
+                Debug.LogWarning(
+                    "[Glank] 録画ファイルが見つかりません。OSのインスタントリプレイ機能（Xbox Game Bar等）で" +
+                    "直近の録画を保存してから再度お試しください。送信を中止しました。"
+                );
+                yield break;
+            }
+
+            yield return GlankClient.SubmitReport(config, metadata, videoPath, (outcome, message) =>
             {
                 switch (outcome)
                 {
@@ -108,7 +145,7 @@ namespace Glank
                         Debug.LogError($"[Glank] report submission failed: {message}");
                         break;
                 }
-            }));
+            });
         }
     }
 }

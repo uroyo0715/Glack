@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "displayName": "Glank Bug Report SDK",
   "unity": "2021.3",
-  "description": "Glank向けの入力ログ記録 + バグ報告送信SDK。UPMのローカル/embeddedパッケージとして追加できます。",
+  "description": "Glank向けの入力ログ記録 + バグ報告送信SDK。UPMのローカル/embeddedパッケージとして追加できます。動画取得を推奨方式(InstantReplayVideoRecorder)にする場合はInstantReplay for Unity(別途導入、Unity 2022.3以降が必要)とGLANK_INSTANT_REPLAYスクリプティング定義シンボルが必要です。詳細はREADME.mdの「動画録画について」を参照。",
   "keywords": ["bug-report", "qa", "glank"]
 }
