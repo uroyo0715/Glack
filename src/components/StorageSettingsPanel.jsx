@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 const EMPTY_TURSO = { url: '', authToken: '' }
 const EMPTY_R2 = { accountId: '', accessKeyId: '', secretAccessKey: '', bucket: '', publicUrl: '' }
@@ -98,6 +99,10 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
         Glankが用意する共有ストレージ（managed）を使うと、プロジェクトごとのTurso・R2設定が
         不要になります（プロジェクト単位500MB・全体8GBの上限あり）。
         {!status.isManagedAllowed && 'ただし現在このプロジェクトでは利用できません。'}
+        {' '}
+        <Link to="/help#storage-setup" target="_blank" className="help-link">
+          Turso・R2の設定方法はこちら
+        </Link>
       </p>
 
       <div className="storage-mode-toggle">

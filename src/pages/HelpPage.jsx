@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import SegmentedToggle from '../components/SegmentedToggle.jsx'
 import { sdkDownloadUrl } from '../api/index.js'
 
@@ -218,8 +219,111 @@ function GodotGuide() {
   )
 }
 
+function StorageGuide() {
+  return (
+    <section id="storage-setup" className="help-storage-section">
+      <h1>ストレージ設定（Turso・R2）の手順</h1>
+      <p className="help-lead">
+        プロジェクトごとの報告データベースと動画・画像の保存先には、Glankが用意する共有ストレージ
+        （<span className="mono">managed</span>）と、自分のTurso・Cloudflare R2アカウントを使う
+        （<span className="mono">self_hosted</span>）の2種類があります。プロジェクトのバグ一覧画面の
+        「ストレージ設定」から切り替えられます。
+      </p>
+
+      <ol className="help-steps">
+        <li>
+          <h2>1. managed と self_hosted、どちらを使うか</h2>
+          <p>
+            まずは<span className="mono">managed</span>（設定不要・無料）から始めるのが手軽です。
+            プロジェクト単位500MB・全体8GBの上限を超えそうな場合や、データを自分の管理下に置きたい
+            場合に、下記の手順でTurso・R2を用意して<span className="mono">self_hosted</span>
+            に切り替えてください。
+          </p>
+        </li>
+
+        <li>
+          <h2>2. Turso（データベース）を用意する</h2>
+          <p>
+            <a href="https://turso.tech/" target="_blank" rel="noreferrer">
+              Tursoのダッシュボード
+            </a>
+            にアクセスし、アカウント作成後「Create Database」から新しいデータベースを1つ作成します
+            （Windows環境ではTurso CLIのインストーラーが対応していないため、Webダッシュボードでの
+            作成を推奨します）。作成したデータベースの詳細ページで、以下の2つを取得して
+            ストレージ設定フォームに入力してください。
+          </p>
+          <table className="help-table">
+            <tbody>
+              <tr>
+                <td className="mono">Database URL</td>
+                <td>
+                  データベース詳細ページに表示される<span className="mono">libsql://xxx.turso.io</span>
+                  形式のURL
+                </td>
+              </tr>
+              <tr>
+                <td className="mono">Auth Token</td>
+                <td>
+                  同じページの「Create Token」（または「Generate Token」）で発行したトークン。
+                  発行直後しか表示されないので、その場でコピーしてください
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </li>
+
+        <li>
+          <h2>3. Cloudflare R2（動画・画像ストレージ）を用意する</h2>
+          <p>
+            <a href="https://dash.cloudflare.com/" target="_blank" rel="noreferrer">
+              Cloudflareダッシュボード
+            </a>
+            の「R2」からバケットを1つ作成し、バケットの設定でパブリックアクセス（
+            <span className="mono">r2.dev</span> のサブドメイン、または独自ドメイン）を有効にします。
+            続けて「R2 API トークン」を発行し、以下をストレージ設定フォームに入力してください。
+          </p>
+          <table className="help-table">
+            <tbody>
+              <tr>
+                <td className="mono">Account ID</td>
+                <td>Cloudflareダッシュボードの右側などに表示されるアカウントID</td>
+              </tr>
+              <tr>
+                <td className="mono">Access Key ID / Secret Access Key</td>
+                <td>R2 APIトークン発行時に表示される値（Secretは発行直後しか表示されません）</td>
+              </tr>
+              <tr>
+                <td className="mono">Bucket名</td>
+                <td>作成したR2バケットの名前</td>
+              </tr>
+              <tr>
+                <td className="mono">公開URL</td>
+                <td>
+                  バケット設定で有効にしたパブリックアクセスのURL（例:{' '}
+                  <span className="mono">https://pub-xxx.r2.dev</span>）
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            値をコピー&amp;ペーストする際、全角スペースや全角記号が誤って混ざると接続エラーの原因に
+            なるため、貼り付けた後に文字化けや余分な文字が入っていないか確認してください。
+          </p>
+        </li>
+      </ol>
+    </section>
+  )
+}
+
 export default function HelpPage({ defaultEngine = 'unity' }) {
   const [engine, setEngine] = useState(defaultEngine === 'godot' ? 'godot' : 'unity')
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!location.hash) return
+    const target = document.querySelector(location.hash)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [location.hash])
 
   return (
     <main className="help-page">
@@ -251,6 +355,8 @@ export default function HelpPage({ defaultEngine = 'unity' }) {
           <span className="mono">{engine === 'godot' ? 'godot-sdk/README.md' : 'unity-sdk/README.md'}</span>{' '}
           と<span className="mono"> docs/api-spec.md</span> を参照してください。
         </p>
+
+        <StorageGuide />
       </div>
     </main>
   )
