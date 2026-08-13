@@ -16,5 +16,11 @@ namespace Glank
 
         [Tooltip("報告先のGlankプロジェクトID。Web側のプロジェクト画面で確認できる")]
         public int projectId;
+
+        [Header("自動検知(任意)")]
+        [Tooltip("CrashDetector/FreezeWatchdogによるクラッシュ・フリーズの自動検知/自動報告を有効にする。" +
+            "既定でfalse。配布ビルドに含める場合、意図せず大量の自動報告が飛ぶのを防ぐため、" +
+            "有効化する前に自動検知の挙動を十分確認すること。")]
+        public bool autoDetectionEnabled = false;
     }
 }

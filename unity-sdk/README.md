@@ -47,6 +47,8 @@ Glankへ入力ログ付きバグ報告を送信するための最小SDK。
 - `GlankReplayer.cs` — Webアプリのバグ詳細画面「JSONをダウンロード」で書き出した入力ログを
   読み込み、記録時と同じタイミングで再生するMonoBehaviour。バグの再現に使う。詳細は下記
   「入力ログからの再現（GlankReplayer）」を参照。
+- `CrashDetector.cs` / `FreezeWatchdog.cs` — クラッシュ・フリーズを自動検知して報告を送信する
+  （既定OFF）。詳細は下記「自動検知（クラッシュ/フリーズ）」を参照。
 
 ## 動画録画について
 
@@ -230,6 +232,58 @@ public class PlayerInput : MonoBehaviour
 - `LoadFromJson(json)` / `LoadFromFile(path)` で実行時に動的にログを読み込むこともできる
   （例: Glank Web APIから取得したJSONをそのまま渡す）。
 
+## 自動検知（クラッシュ/フリーズ）
+
+ホットキーによる手動報告とは別に、**クラッシュ**と**フリーズ**の2種類に限定して自動検知・
+自動報告できる。対象をこの2種類に絞っているのは、透明化やテクスチャ崩れのような見た目の不具合は
+画面解析（コンピュータビジョン）が必要でコストが見合わないのと、そもそもGlankが目指しているのは
+「人間にしか気づけない主観的な違和感を拾う」ことだから（そちらは引き続きホットキーでの手動報告が対象）。
+
+**両方とも既定で無効。** `GlankConfig.autoDetectionEnabled` をtrueにしない限り何もしない
+（配布ビルドに含める場合、意図せず大量の自動報告が飛ぶのを防ぐため）。有効化する前に、
+実機に近い環境で自動検知の挙動（誤検知しないか、報告が乱発しないか）を十分確認すること。
+
+自動検知した報告は、既存の`BugReportTrigger.SubmitReport`にそのまま乗るため、動画・入力ログの
+取得元（`InstantReplayVideoRecorder`優先→`ReplayFolderWatcher`フォールバック）や送信失敗時の
+リトライ（`GlankOfflineQueue`）は手動報告と共通で機能する。タイトルは`"[自動検知] クラッシュ"` /
+`"[自動検知] フリーズ"`となり、手動報告と見分けられるようにしている。
+
+### CrashDetector
+
+`Application.logMessageReceived`を監視し、`LogType.Exception`（未処理の例外）を検知したら
+自動で送信する（tag: `crash`）。`LogType.Error`は既定では対象外（アセット読み込み失敗など、
+クラッシュではない単なるエラーログまで拾うと誤検知が増えるため）。`LogType.Error`も対象にしたい
+場合は、`treatAllErrorsAsFatal`を有効にするか、`IsFatalError`に個別の判定条件
+（メッセージのパターンマッチ等）を差し込む:
+
+```csharp
+crashDetector.IsFatalError = (condition, stackTrace) => condition.Contains("FATAL");
+```
+
+連続クラッシュで自動報告が乱発しないよう、既定30秒のクールダウンがある（`cooldownSeconds`）。
+
+### FreezeWatchdog
+
+既定10秒（`freezeThresholdSeconds`で変更可能）フレーム更新（`Time.frameCount`の進行）が
+止まっていることを検知したら自動で送信する（tag: `softlock`）。メインスレッドが詰まっている
+状況を想定しているため、検知そのものは別スレッドで行う（メインスレッドのUpdate/コルーチンでは、
+メインスレッドが本当に固まった場合はその検知処理自体も止まってしまうため使えない）。
+
+ただし報告の送信（入力ログの取得・UnityWebRequest送信等）はUnity APIの制約上メインスレッドでしか
+行えないため、実際の送信は「フリーズを検知した後、メインスレッドが応答を再開した最初のUpdate()」で
+行われる。**メインスレッドが完全にデッドロックして二度と応答しない場合、原理的にどのような実装でも
+報告を送信できない**点に注意（ソフトウェア側の対処には限界があり、外部プロセスによるハング
+ウォッチドッグ等、SDKの範囲外の仕組みでのみ対応可能）。
+
+断続的なフリーズが続く場合に自動報告が乱発しないよう、既定60秒のクールダウンがある
+（`cooldownSeconds`）。
+
+### セットアップ
+
+シーンに`CrashDetector`・`FreezeWatchdog`をアタッチしたGameObjectを置き、それぞれの
+`config`（`GlankConfig`）と`trigger`（`BugReportTrigger`）をInspectorでアサインするだけでよい
+（コード不要）。`GlankConfig.autoDetectionEnabled`をtrueにすると有効になる。
+
 ## 入力ログのフレーム番号について
 
 - `InputLogRecorder` は `Time.frameCount`（絶対フレーム）で押下・離上を検知し、
@@ -257,3 +311,7 @@ public class PlayerInput : MonoBehaviour
 - `InstantReplayVideoRecorder`・`BugReportTrigger`の非同期パスは実機（実際のUnityビルド環境）
   での動作確認がまだ済んでいない（このSDKはC#プロジェクトとしてUnity環境の外で開発しているため。
   依存するInstantReplay本体のAPIはpublicなソースを基に実装しているが、導入後に実機で確認すること）
+- `CrashDetector`・`FreezeWatchdog`も同様に実機での動作確認がまだ済んでいない。特に
+  `FreezeWatchdog`は別スレッドでの監視を伴うため、対象プラットフォームでのスレッド動作
+  （モバイル・コンソール等、プラットフォームによってはスレッド生成に制約がある場合がある）を
+  導入前に確認すること
