@@ -850,6 +850,65 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.storage-saved-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.storage-saved-config-delete-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12.5px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.storage-saved-config-delete-button:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+.storage-saved-config-delete-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.storage-save-as-form {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.storage-save-as-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.storage-save-as-row input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+.storage-save-as-row button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: var(--accent-amber);
+  color: #1a1300;
+  cursor: pointer;
+}
+.storage-save-as-row button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .storage-config-forms {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -22,7 +22,8 @@ import {
   GAME_ENGINE_LABELS,
   listSavedStorageConfigsForOwner,
   getSavedStorageConfigForOwner,
-  upsertSavedStorageConfig,
+  saveNamedStorageConfig,
+  deleteSavedStorageConfig,
 } from '../data.js'
 import { requireAuth } from '../auth.js'
 import { saveImage, deleteFile } from '../storage.js'
@@ -325,35 +326,33 @@ router.patch(
       })
     }
 
-    // 接続情報を実際に入力した本人だけが、後で「呼び出せる設定」として使える。
+    // 接続情報を実際に入力した本人を「設定者」として記録する（呼び出せる設定として自動保存はしない。
+    // 呼び出せる設定にしたい場合は、下のPOST /projects/:id/storage/saved-configsで
+    // 明示的に名前を付けて保存してもらう）。
     if (turso != null || r2 != null) {
       update.storageConfiguredByEmail = req.user.email
       update.storageConfiguredByName = req.user.displayName
     }
 
     const updated = await updateProjectStorageConfig(projectId, update)
-
-    if (turso != null || r2 != null) {
-      // 「今回のリクエストで触った方だけ」ではなく、プロジェクトが現在実際に持っている
-      // tursoConfigEnc/r2ConfigEncをそのまま丸ごと保存する。片方だけ更新した場合でも、
-      // もう片方がこの機能の導入前から既に設定済みだったケースを取りこぼさないため
-      // （そうしないと、Tursoだけ入力し直した時に保存済み設定からR2が消えてしまう）。
-      await upsertSavedStorageConfig({
-        ownerEmail: req.user.email,
-        sourceProjectId: projectId,
-        sourceProjectName: updated.name,
-        tursoConfigEnc: updated.tursoConfigEnc,
-        r2ConfigEnc: updated.r2ConfigEnc,
-      })
-    }
-
     invalidateProjectDataClientCache(projectId)
     res.json(toStorageStatus(updated))
   })
 )
 
-// 自分が過去に設定したTurso/R2接続情報の一覧（他メンバーの設定は決して見えない）。
+// 自分が名前を付けて保存したTurso/R2接続情報の一覧（他メンバーの設定は決して見えない）。
+// プロジェクトには紐付かないため、プロジェクトが増えても一覧が際限なく増えたり、
+// 同じ接続情報がプロジェクトの数だけ重複して並んだりしない。
 router.get(
+  '/storage/saved-configs',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.json(await listSavedStorageConfigsForOwner(req.user.email))
+  })
+)
+
+// このプロジェクトの現在の接続情報を、名前を付けて保存する（他プロジェクトから呼び出せるようになる）。
+router.post(
   '/projects/:id/storage/saved-configs',
   requireAuth,
   asyncHandler(async (req, res) => {
@@ -361,12 +360,37 @@ router.get(
     if (!(await isProjectMember(projectId, req.user.email))) {
       return res.status(404).json({ error: 'not found' })
     }
-    const configs = await listSavedStorageConfigsForOwner(req.user.email, projectId)
-    res.json(configs)
+    const { name } = req.body ?? {}
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' })
+    }
+
+    const project = await getProjectRaw(projectId)
+    if (!project.tursoConfigEnc && !project.r2ConfigEnc) {
+      return res.status(400).json({ error: 'this project has no turso/r2 config to save yet' })
+    }
+
+    await saveNamedStorageConfig({
+      ownerEmail: req.user.email,
+      name: name.trim(),
+      tursoConfigEnc: project.tursoConfigEnc,
+      r2ConfigEnc: project.r2ConfigEnc,
+    })
+    res.status(201).json(await listSavedStorageConfigsForOwner(req.user.email))
   })
 )
 
-// 自分が過去に設定した接続情報を、このプロジェクトにそのまま適用する。
+// 自分が保存した設定を削除する。
+router.delete(
+  '/storage/saved-configs/:configId',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await deleteSavedStorageConfig(Number(req.params.configId), req.user.email)
+    res.json(await listSavedStorageConfigsForOwner(req.user.email))
+  })
+)
+
+// 自分が保存した接続情報を、このプロジェクトにそのまま適用する。
 router.post(
   '/projects/:id/storage/apply-saved',
   requireAuth,
@@ -387,7 +411,6 @@ router.post(
       return res.status(404).json({ error: 'saved storage config not found' })
     }
 
-    const project = await getProjectRaw(projectId)
     const update = {
       storageConfiguredByEmail: req.user.email,
       storageConfiguredByName: req.user.displayName,
@@ -396,17 +419,6 @@ router.post(
     if (saved.r2ConfigEnc) update.r2ConfigEnc = saved.r2ConfigEnc
 
     const updated = await updateProjectStorageConfig(projectId, update)
-
-    // 「今回適用した方だけ」ではなく、対象プロジェクトが現在実際に持っているtursoConfigEnc/
-    // r2ConfigEncをそのまま丸ごと保存する（PATCH /storageと同じ理由）。
-    await upsertSavedStorageConfig({
-      ownerEmail: req.user.email,
-      sourceProjectId: projectId,
-      sourceProjectName: updated.name,
-      tursoConfigEnc: updated.tursoConfigEnc,
-      r2ConfigEnc: updated.r2ConfigEnc,
-    })
-
     invalidateProjectDataClientCache(projectId)
     res.json(toStorageStatus(updated))
   })

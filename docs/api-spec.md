@@ -164,20 +164,27 @@ DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由�
 - `PATCH /projects/:id/storage` — body: `{ storageMode?, turso?: { url, authToken }, r2?: {...} }`。
   渡したフィールドだけ更新する部分更新。`storageMode: 'managed'`は`isManagedAllowed`が
   falseだと`403`。レスポンス形は`GET`と同じ（更新後の状態、秘密は含まない）。`turso`/`r2`を
-  渡すと、その接続情報を入力した本人（ログインユーザー）が「設定者」として記録され、
-  下記の`savedStorageConfigs`にもその人専用の呼び出し可能な設定として保存される。
+  渡すと、その接続情報を入力した本人（ログインユーザー）が`configuredByName`として記録される
+  （このAPI単体では下記の「名前を付けて保存」は行わない。呼び出せるようにしたい場合は
+  別途`POST /projects/:id/storage/saved-configs`を呼ぶ）。
 
-##### 保存済み設定の呼び出し（呼び出せるのは設定した本人のみ）
+##### 名前を付けて保存した設定の呼び出し（呼び出せるのは保存した本人のみ）
 
-一度あるプロジェクトでTurso/R2を設定すると、その接続情報は設定した本人のアカウントに
-紐づけて保存され（`savedStorageConfigs`テーブル、`ownerEmail`単位）、別のプロジェクトの
-ストレージ設定時に選んで適用できる。`ownerEmail`で厳密に絞り込むため、**他のメンバーは
-自分以外が設定した接続情報を一覧にも取得にも呼び出せない**（プロジェクトメンバーであることは
-前提として要求するが、それだけでは他人の保存済み設定は見えない）。
+Turso/R2の接続情報は、ユーザーが任意の名前を付けて明示的に保存でき（`savedStorageConfigs`
+テーブル、`ownerEmail`単位）、別のプロジェクトのストレージ設定時に選んで適用できる。
+プロジェクトに自動で紐付くわけではないため、プロジェクト数が増えても一覧が際限なく増えたり、
+同じ接続情報がプロジェクトの数だけ重複して並んだりしない。`ownerEmail`で厳密に絞り込むため、
+**他のメンバーは自分以外が保存した接続情報を一覧にも取得にも呼び出せない**（プロジェクト
+メンバーであることは適用先プロジェクトに対して要求するが、それだけでは他人の保存済み設定は見えない）。
 
-- `GET /projects/:id/storage/saved-configs` — ログイン中の自分が過去に設定した接続情報の一覧
-  （`:id`のプロジェクト自身の分は除く）。各要素: `{ id, sourceProjectId, sourceProjectName, hasTurso, hasR2, updatedAt }`。
-  秘密の値自体は含まない。非メンバーは`404`。
+- `GET /storage/saved-configs` — ログイン中の自分が保存した接続情報の一覧。各要素:
+  `{ id, name, hasTurso, hasR2, updatedAt }`。秘密の値自体は含まない。プロジェクトには
+  紐付かないため`:id`は不要。
+- `POST /projects/:id/storage/saved-configs` — body: `{ name }`。`:id`のプロジェクトが
+  現在持っているTurso/R2接続情報に、指定した名前を付けて保存する（同じ名前で保存し直すと
+  上書き）。Turso/R2どちらも未設定なら`400`。非メンバーは`404`。
+- `DELETE /storage/saved-configs/:configId` — 自分が保存した設定を削除する。他人の`configId`
+  を指定しても何も起きない（サイレントに無視）。
 - `POST /projects/:id/storage/apply-saved` — body: `{ savedConfigId }`。指定した保存済み設定
   （自分が所有するものに限る。他人のIDを指定しても`404`）を`:id`のプロジェクトにコピーして適用する。
   レスポンス形は`GET /projects/:id/storage`と同じ。

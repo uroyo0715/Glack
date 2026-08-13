@@ -156,20 +156,47 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
 }
 
 /**
- * ログイン中の自分が過去に設定したTurso/R2接続情報の一覧（このプロジェクト自身の分は除く）。
- * 他メンバーが設定したものは含まれない。
- * @returns {Promise<{id: number, sourceProjectId: number, sourceProjectName: string, hasTurso: boolean, hasR2: boolean, updatedAt: string}[]>}
+ * ログイン中の自分が名前を付けて保存したTurso/R2接続情報の一覧。プロジェクトには紐付かないため、
+ * どのプロジェクトからでも同じ一覧が見える。他メンバーが保存したものは含まれない。
+ * @returns {Promise<{id: number, name: string, hasTurso: boolean, hasR2: boolean, updatedAt: string}[]>}
  */
-export async function fetchSavedStorageConfigs(projectId) {
-  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage/saved-configs`, {
-    credentials: 'include',
-  })
+export async function fetchSavedStorageConfigs() {
+  const res = await fetch(`${BASE_URL}/storage/saved-configs`, { credentials: 'include' })
   if (!res.ok) throw new Error(`fetchSavedStorageConfigs failed: ${res.status}`)
   return res.json()
 }
 
 /**
- * 自分が過去に設定した接続情報を、このプロジェクトにそのまま適用する。
+ * このプロジェクトが現在持っているTurso/R2接続情報に、名前を付けて保存する
+ * （同じ名前で保存し直すと上書き）。Turso/R2どちらも未設定だとエラー。
+ * @returns {Promise<{id: number, name: string, hasTurso: boolean, hasR2: boolean, updatedAt: string}[]>}
+ */
+export async function saveNamedStorageConfig(projectId, name) {
+  const res = await fetch(`${BASE_URL}/projects/${projectId}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `saveNamedStorageConfig failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/** 自分が保存した設定を削除する。 @returns {Promise<{id, name, hasTurso, hasR2, updatedAt}[]>} */
+export async function deleteSavedStorageConfig(savedConfigId) {
+  const res = await fetch(`${BASE_URL}/storage/saved-configs/${savedConfigId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(`deleteSavedStorageConfig failed: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * 自分が保存した接続情報を、このプロジェクトにそのまま適用する。
  * @returns {Promise<{storageMode, isManagedAllowed, tursoConfigured, r2Configured, configuredByName}>}
  */
 export async function applySavedStorageConfig(projectId, savedConfigId) {

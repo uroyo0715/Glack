@@ -340,14 +340,12 @@ describe('mockClient project members', () => {
 })
 
 describe('mockClient saved storage configs', () => {
-  it('updateProjectStorage records configuredByName and saves a recallable config', async () => {
+  it('updateProjectStorage records configuredByName but does not auto-save a named config', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()
 
-    const [sourceProject] = await client.fetchProjects()
-    const otherProject = await client.createProject('別プロジェクト', null, '')
-
-    const updated = await client.updateProjectStorage(sourceProject.id, {
+    const [project] = await client.fetchProjects()
+    const updated = await client.updateProjectStorage(project.id, {
       turso: { url: 'libsql://x.turso.io', authToken: 't' },
       r2: {
         accountId: 'a',
@@ -358,23 +356,46 @@ describe('mockClient saved storage configs', () => {
       },
     })
     expect(updated.configuredByName).toBe('デモユーザー')
-
-    // 設定したプロジェクト自身は「呼び出せる設定」の一覧からは除かれる
-    const ownList = await client.fetchSavedStorageConfigs(sourceProject.id)
-    expect(ownList).toEqual([])
-
-    // 別のプロジェクトからは呼び出せる
-    const otherList = await client.fetchSavedStorageConfigs(otherProject.id)
-    expect(otherList).toHaveLength(1)
-    expect(otherList[0]).toMatchObject({
-      sourceProjectId: sourceProject.id,
-      sourceProjectName: sourceProject.name,
-      hasTurso: true,
-      hasR2: true,
-    })
+    expect(await client.fetchSavedStorageConfigs()).toEqual([])
   })
 
-  it('applySavedStorageConfig copies the saved config into the target project', async () => {
+  it('saveNamedStorageConfig saves the current config under a chosen name, reusable from any project', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+
+    const [sourceProject] = await client.fetchProjects()
+    await client.updateProjectStorage(sourceProject.id, {
+      turso: { url: 'libsql://x.turso.io', authToken: 't' },
+      r2: {
+        accountId: 'a',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        bucket: 'b',
+        publicUrl: 'https://pub-x.r2.dev',
+      },
+    })
+
+    const list = await client.saveNamedStorageConfig(sourceProject.id, '本番用R2+Turso')
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ name: '本番用R2+Turso', hasTurso: true, hasR2: true })
+
+    // 保存し直しても増えず上書きされる
+    const again = await client.saveNamedStorageConfig(sourceProject.id, '本番用R2+Turso')
+    expect(again).toHaveLength(1)
+  })
+
+  it('saveNamedStorageConfig rejects an empty name and a project with nothing configured yet', async () => {
+    const client = await freshClient()
+    await client.loginWithGoogle()
+    const otherProject = await client.createProject('未設定プロジェクト', null, '')
+
+    await expect(client.saveNamedStorageConfig(otherProject.id, '')).rejects.toThrow('name is required')
+    await expect(client.saveNamedStorageConfig(otherProject.id, '名前')).rejects.toThrow(
+      'this project has no turso/r2 config to save yet'
+    )
+  })
+
+  it('applySavedStorageConfig copies a named config into the target project', async () => {
     const client = await freshClient()
     await client.loginWithGoogle()
 
@@ -383,8 +404,8 @@ describe('mockClient saved storage configs', () => {
     await client.updateProjectStorage(sourceProject.id, {
       turso: { url: 'libsql://x.turso.io', authToken: 't' },
     })
+    const [saved] = await client.saveNamedStorageConfig(sourceProject.id, 'Turso設定')
 
-    const [saved] = await client.fetchSavedStorageConfigs(otherProject.id)
     const applied = await client.applySavedStorageConfig(otherProject.id, saved.id)
     expect(applied.tursoConfigured).toBe(true)
     expect(applied.configuredByName).toBe('デモユーザー')
@@ -399,9 +420,21 @@ describe('mockClient saved storage configs', () => {
     )
   })
 
-  it('fetchSavedStorageConfigs/applySavedStorageConfig require login', async () => {
+  it('deleteSavedStorageConfig removes the config from the list', async () => {
     const client = await freshClient()
-    await expect(client.fetchSavedStorageConfigs(1)).rejects.toThrow('login required')
+    await client.loginWithGoogle()
+    const [project] = await client.fetchProjects()
+    await client.updateProjectStorage(project.id, { turso: { url: 'libsql://x.turso.io', authToken: 't' } })
+    const [saved] = await client.saveNamedStorageConfig(project.id, '消す設定')
+
+    const afterDelete = await client.deleteSavedStorageConfig(saved.id)
+    expect(afterDelete).toEqual([])
+  })
+
+  it('fetchSavedStorageConfigs/saveNamedStorageConfig/applySavedStorageConfig require login', async () => {
+    const client = await freshClient()
+    await expect(client.fetchSavedStorageConfigs()).rejects.toThrow('login required')
+    await expect(client.saveNamedStorageConfig(1, '名前')).rejects.toThrow('login required')
     await expect(client.applySavedStorageConfig(1, 1)).rejects.toThrow('login required')
   })
 })

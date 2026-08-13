@@ -4,8 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
-import { setProjectManagedAllowed, updateProjectStorageConfig } from '../src/data.js'
-import { encryptR2Config } from '../src/projectDataAccess.js'
+import { setProjectManagedAllowed } from '../src/data.js'
 
 before(startServer)
 after(stopServer)
@@ -415,16 +414,11 @@ test('PATCH /projects/:id/storage records who configured it', async () => {
   assert.equal((await res.json()).configuredByName, '設定太郎')
 })
 
-test('saved storage configs can be recalled by the same owner on another project, but not by other members', async () => {
-  const owner = await createAuthCookie({ name: '呼び出し花子' })
-  const teammate = await createAuthCookie()
-  const stranger = await createAuthCookie()
-
-  const sourceProject = await createProjectAs(owner.cookie, '呼び出し元プロジェクト')
+async function configureTursoAndR2(cookie, projectId) {
   const tursoUrl = `file:${path.join(os.tmpdir(), `glank-saved-${crypto.randomUUID()}.sqlite`)}`
-  const savePatch = await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage`, {
+  await fetch(`${getBaseUrl()}/projects/${projectId}/storage`, {
     method: 'PATCH',
-    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       turso: { url: tursoUrl, authToken: 'unused' },
       r2: {
@@ -436,7 +430,75 @@ test('saved storage configs can be recalled by the same owner on another project
       },
     }),
   })
-  assert.equal(savePatch.status, 200)
+}
+
+test('POST /projects/:id/storage/saved-configs saves the project’s current config under a chosen name', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, '名前付き保存元')
+  await configureTursoAndR2(owner.cookie, project.id)
+
+  const saveRes = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '本番用R2+Turso' }),
+  })
+  assert.equal(saveRes.status, 201)
+  const list = await saveRes.json()
+  assert.equal(list.length, 1)
+  assert.equal(list[0].name, '本番用R2+Turso')
+  assert.equal(list[0].hasTurso, true)
+  assert.equal(list[0].hasR2, true)
+})
+
+test('POST /projects/:id/storage/saved-configs requires a name and an already-configured project', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, '未設定プロジェクト')
+
+  const noConfig = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'まだ設定してない' }),
+  })
+  assert.equal(noConfig.status, 400)
+
+  await configureTursoAndR2(owner.cookie, project.id)
+  const noName = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  assert.equal(noName.status, 400)
+})
+
+test('saving under the same name again overwrites instead of duplicating', async () => {
+  const owner = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, '上書き保存テスト')
+  await configureTursoAndR2(owner.cookie, project.id)
+
+  const first = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '同じ名前' }),
+  })
+  const second = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '同じ名前' }),
+  })
+  assert.equal((await second.json()).length, 1)
+})
+
+test('named saved configs can be recalled by the owner from any project, but not by other members', async () => {
+  const owner = await createAuthCookie({ name: '呼び出し花子' })
+  const teammate = await createAuthCookie()
+
+  const sourceProject = await createProjectAs(owner.cookie, '呼び出し元プロジェクト')
+  await configureTursoAndR2(owner.cookie, sourceProject.id)
+  await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage/saved-configs`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '共有ストレージ設定' }),
+  })
 
   const targetProject = await createProjectAs(owner.cookie, '適用先プロジェクト')
   await fetch(`${getBaseUrl()}/projects/${targetProject.id}/members`, {
@@ -445,30 +507,23 @@ test('saved storage configs can be recalled by the same owner on another project
     body: JSON.stringify({ emails: [teammate.user.email] }),
   })
 
-  // 設定した本人には、そのプロジェクト以外の場所で呼び出せる設定として見える
-  const ownList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
-    headers: { Cookie: owner.cookie },
-  })
+  // 保存した本人には見える（プロジェクトに紐付かないため:idは何でもよいが、メンバーであることは要求する）
+  const ownList = await fetch(`${getBaseUrl()}/storage/saved-configs`, { headers: { Cookie: owner.cookie } })
   assert.equal(ownList.status, 200)
   const ownConfigs = await ownList.json()
   assert.equal(ownConfigs.length, 1)
-  assert.equal(ownConfigs[0].sourceProjectId, sourceProject.id)
-  assert.equal(ownConfigs[0].sourceProjectName, '呼び出し元プロジェクト')
+  assert.equal(ownConfigs[0].name, '共有ストレージ設定')
   assert.equal(ownConfigs[0].hasTurso, true)
   assert.equal(ownConfigs[0].hasR2, true)
 
-  // 同じプロジェクトの他メンバーには、他人（owner）が設定したものは一切見えない
-  const teammateList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
-    headers: { Cookie: teammate.cookie },
-  })
+  // 他メンバーには、他人（owner）が保存したものは一切見えない
+  const teammateList = await fetch(`${getBaseUrl()}/storage/saved-configs`, { headers: { Cookie: teammate.cookie } })
   assert.equal(teammateList.status, 200)
   assert.deepEqual(await teammateList.json(), [])
 
-  // メンバーでない第三者は一覧取得自体ができない
-  const strangerList = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
-    headers: { Cookie: stranger.cookie },
-  })
-  assert.equal(strangerList.status, 404)
+  // 認証していない第三者は401
+  const strangerList = await fetch(`${getBaseUrl()}/storage/saved-configs`)
+  assert.equal(strangerList.status, 401)
 
   // 本人がapply-savedで適用すると、対象プロジェクトに接続情報がコピーされ、設定者名も本人になる
   const applyRes = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
@@ -491,50 +546,34 @@ test('saved storage configs can be recalled by the same owner on another project
   assert.equal(teammateApply.status, 404)
 })
 
-// R2/Tursoが「この保存済み設定を呼び出す」機能の導入より前から既に設定されていたプロジェクト
-// （＝savedStorageConfigsにまだ行がない）で、片方だけを再設定した場合の回帰テスト。
-// 一度だけ触った方の値だけを保存すると、既に設定済みだったもう片方が保存済み設定から
-// 消えてしまうバグがあった（プロジェクト自体には残っているのに、呼び出す側には現れない）。
-test('re-saving only turso on a project that already had r2 configured keeps r2 in the saved config too', async () => {
+test('DELETE /storage/saved-configs/:configId removes only the owner’s own config', async () => {
   const owner = await createAuthCookie()
-  const sourceProject = await createProjectAs(owner.cookie, '既存R2設定済みプロジェクト')
-
-  // この機能の導入前と同じ状態を再現するため、ルート経由ではなくdata.js直で
-  // r2ConfigEncだけを先に設定しておく（＝savedStorageConfigsにはまだ何も残らない）。
-  await updateProjectStorageConfig(sourceProject.id, {
-    r2ConfigEnc: encryptR2Config({
-      accountId: 'acc',
-      accessKeyId: 'key',
-      secretAccessKey: 'secret',
-      bucket: 'bucket',
-      publicUrl: 'https://pub-example.r2.dev',
-    }),
-  })
-
-  // この機能の導入後、Tursoだけを（再）設定する。
-  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-repro-${crypto.randomUUID()}.sqlite`)}`
-  const tursoPatch = await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage`, {
-    method: 'PATCH',
-    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ turso: { url: tursoUrl, authToken: 'unused' } }),
-  })
-  assert.equal(tursoPatch.status, 200)
-
-  const targetProject = await createProjectAs(owner.cookie, '適用先プロジェクト2')
-  const list = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
-    headers: { Cookie: owner.cookie },
-  })
-  const configs = await list.json()
-  assert.equal(configs[0].hasTurso, true)
-  assert.equal(configs[0].hasR2, true) // ここが導入前から設定済みだったR2
-
-  const applyRes = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
+  const stranger = await createAuthCookie()
+  const project = await createProjectAs(owner.cookie, '削除テスト')
+  await configureTursoAndR2(owner.cookie, project.id)
+  const saveRes = await fetch(`${getBaseUrl()}/projects/${project.id}/storage/saved-configs`, {
     method: 'POST',
     headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ savedConfigId: configs[0].id }),
+    body: JSON.stringify({ name: '消す設定' }),
   })
-  const applied = await applyRes.json()
-  assert.equal(applied.r2Configured, true)
+  const [saved] = await saveRes.json()
+
+  // 他人が消そうとしても何も起きない（サイレントに無視）
+  await fetch(`${getBaseUrl()}/storage/saved-configs/${saved.id}`, {
+    method: 'DELETE',
+    headers: { Cookie: stranger.cookie },
+  })
+  const stillThere = await (
+    await fetch(`${getBaseUrl()}/storage/saved-configs`, { headers: { Cookie: owner.cookie } })
+  ).json()
+  assert.equal(stillThere.length, 1)
+
+  const delRes = await fetch(`${getBaseUrl()}/storage/saved-configs/${saved.id}`, {
+    method: 'DELETE',
+    headers: { Cookie: owner.cookie },
+  })
+  assert.equal(delRes.status, 200)
+  assert.deepEqual(await delRes.json(), [])
 })
 
 test('POST /projects/:id/storage/apply-saved validates the body and requires membership', async () => {

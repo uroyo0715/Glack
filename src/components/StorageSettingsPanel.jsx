@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchSavedStorageConfigs, applySavedStorageConfig } from '../api/index.js'
+import {
+  fetchSavedStorageConfigs,
+  saveNamedStorageConfig,
+  deleteSavedStorageConfig,
+  applySavedStorageConfig,
+} from '../api/index.js'
 
 const EMPTY_TURSO = { url: '', authToken: '' }
 const EMPTY_R2 = { accountId: '', accessKeyId: '', secretAccessKey: '', bucket: '', publicUrl: '' }
@@ -21,10 +26,15 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
   const [r2Saving, setR2Saving] = useState(false)
   const [r2Error, setR2Error] = useState(null)
 
-  // 自分が過去に設定したTurso/R2接続情報（他人の設定は決して含まれない。他メンバーには呼び出せない）。
+  // 自分が名前を付けて保存したTurso/R2接続情報（他人の設定は決して含まれない。他メンバーには呼び出せない）。
   const [savedConfigs, setSavedConfigs] = useState([])
   const [applyingId, setApplyingId] = useState(null)
   const [applyError, setApplyError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const [saveAsName, setSaveAsName] = useState('')
+  const [saveAsSaving, setSaveAsSaving] = useState(false)
+  const [saveAsError, setSaveAsError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -47,15 +57,15 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
 
   useEffect(() => {
     let cancelled = false
-    fetchSavedStorageConfigs(projectId)
+    fetchSavedStorageConfigs()
       .then((result) => {
         if (!cancelled) setSavedConfigs(result)
       })
-      .catch(() => {}) // 呼び出せる保存済み設定が無くても致命的ではないので静かに諦める
+      .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [])
 
   function handleApplySaved(savedConfigId) {
     setApplyingId(savedConfigId)
@@ -64,6 +74,26 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
       .then((result) => setStatus(result))
       .catch((err) => setApplyError(err.message ?? String(err)))
       .finally(() => setApplyingId(null))
+  }
+
+  function handleDeleteSaved(savedConfigId) {
+    setDeletingId(savedConfigId)
+    deleteSavedStorageConfig(savedConfigId)
+      .then((result) => setSavedConfigs(result))
+      .finally(() => setDeletingId(null))
+  }
+
+  function handleSaveAsSubmit(e) {
+    e.preventDefault()
+    setSaveAsSaving(true)
+    setSaveAsError(null)
+    saveNamedStorageConfig(projectId, saveAsName)
+      .then((result) => {
+        setSavedConfigs(result)
+        setSaveAsName('')
+      })
+      .catch((err) => setSaveAsError(err.message ?? String(err)))
+      .finally(() => setSaveAsSaving(false))
   }
 
   function handleModeChange(nextMode) {
@@ -174,26 +204,54 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
         <div className="storage-saved-configs">
           <div className="members-panel-label">保存済みの設定から呼び出す</div>
           <p className="storage-panel-hint">
-            自分が過去に設定したTurso・R2の接続情報だけが表示されます（他のメンバーが設定したものは
+            自分が名前を付けて保存したTurso・R2の接続情報だけが表示されます（他のメンバーが保存したものは
             呼び出せません）。
           </p>
           <ul className="storage-saved-configs-list">
             {savedConfigs.map((c) => (
               <li key={c.id} className="storage-saved-config-item">
-                <span className="storage-saved-config-tag">{c.sourceProjectName}</span>
-                <button
-                  type="button"
-                  className="storage-saved-config-apply-button"
-                  disabled={applyingId === c.id}
-                  onClick={() => handleApplySaved(c.id)}
-                >
-                  {applyingId === c.id ? '適用中...' : 'この設定を適用'}
-                </button>
+                <span className="storage-saved-config-tag">{c.name}</span>
+                <div className="storage-saved-config-actions">
+                  <button
+                    type="button"
+                    className="storage-saved-config-apply-button"
+                    disabled={applyingId === c.id}
+                    onClick={() => handleApplySaved(c.id)}
+                  >
+                    {applyingId === c.id ? '適用中...' : 'この設定を適用'}
+                  </button>
+                  <button
+                    type="button"
+                    className="storage-saved-config-delete-button"
+                    disabled={deletingId === c.id}
+                    onClick={() => handleDeleteSaved(c.id)}
+                  >
+                    削除
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
           {applyError && <div className="project-form-error">{applyError}</div>}
         </div>
+      )}
+
+      {isSelfHosted && (status.tursoConfigured || status.r2Configured) && (
+        <form className="storage-save-as-form" onSubmit={handleSaveAsSubmit}>
+          <span className="members-panel-label">現在の設定を名前を付けて保存</span>
+          <div className="storage-save-as-row">
+            <input
+              type="text"
+              placeholder="設定名（例: 本番用R2+Turso）"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+            />
+            <button type="submit" disabled={saveAsSaving || !saveAsName.trim()}>
+              {saveAsSaving ? '保存中...' : '保存'}
+            </button>
+          </div>
+          {saveAsError && <div className="project-form-error">{saveAsError}</div>}
+        </form>
       )}
 
       {isSelfHosted && (

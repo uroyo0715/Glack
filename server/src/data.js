@@ -573,26 +573,23 @@ export async function updateProjectStorageConfig(
 }
 
 /**
- * ログイン中ユーザー自身が過去に設定したTurso/R2接続情報の一覧（他人の設定は決して含まない）。
- * excludeProjectIdを渡すと、そのプロジェクト自身の保存分は除いて返す
- * （「自分自身に適用する」という無意味な選択肢を出さないため）。
+ * ログイン中ユーザー自身が名前を付けて保存したTurso/R2接続情報の一覧（他人の設定は決して含まない）。
+ * プロジェクトには紐付かないため、プロジェクト数が増えても一覧が際限なく増えたり、
+ * 同じ接続情報がプロジェクトの数だけ重複して並んだりしない。
  */
-export async function listSavedStorageConfigsForOwner(ownerEmail, excludeProjectId) {
+export async function listSavedStorageConfigsForOwner(ownerEmail) {
   const { rows } = await db.execute({
-    sql: `SELECT id, sourceProjectId, sourceProjectName, tursoConfigEnc, r2ConfigEnc, updatedAt
+    sql: `SELECT id, name, tursoConfigEnc, r2ConfigEnc, updatedAt
           FROM savedStorageConfigs WHERE ownerEmail = ? ORDER BY updatedAt DESC`,
     args: [normalizeEmail(ownerEmail)],
   })
-  return rows
-    .filter((row) => Number(row.sourceProjectId) !== Number(excludeProjectId))
-    .map((row) => ({
-      id: Number(row.id),
-      sourceProjectId: Number(row.sourceProjectId),
-      sourceProjectName: row.sourceProjectName,
-      hasTurso: Boolean(row.tursoConfigEnc),
-      hasR2: Boolean(row.r2ConfigEnc),
-      updatedAt: row.updatedAt,
-    }))
+  return rows.map((row) => ({
+    id: Number(row.id),
+    name: row.name,
+    hasTurso: Boolean(row.tursoConfigEnc),
+    hasR2: Boolean(row.r2ConfigEnc),
+    updatedAt: row.updatedAt,
+  }))
 }
 
 /** 保存済み接続情報を1件取得する。ownerEmailが一致しない場合は他人のものなのでnullを返す。 */
@@ -605,34 +602,27 @@ export async function getSavedStorageConfigForOwner(id, ownerEmail) {
 }
 
 /**
- * プロジェクトのTurso/R2設定を保存するたびに、設定した本人の「呼び出せる設定」としても
- * 保存/更新しておく（(ownerEmail, sourceProjectId)単位で最新の1件に上書き）。
- * tursoConfigEnc/r2ConfigEncは渡された方だけ更新し、渡さなかった方は既存値を保つ。
+ * 現在の接続情報（tursoConfigEnc/r2ConfigEnc、どちらも渡された値をそのまま使う。片方がnullなら
+ * 未設定として保存する）に、ユーザーが選んだ名前を付けて保存する。同じ名前で保存し直すと上書きする。
  */
-export async function upsertSavedStorageConfig({
-  ownerEmail,
-  sourceProjectId,
-  sourceProjectName,
-  tursoConfigEnc,
-  r2ConfigEnc,
-}) {
+export async function saveNamedStorageConfig({ ownerEmail, name, tursoConfigEnc, r2ConfigEnc }) {
   const email = normalizeEmail(ownerEmail)
-  const existing = await db.execute({
-    sql: 'SELECT tursoConfigEnc, r2ConfigEnc FROM savedStorageConfigs WHERE ownerEmail = ? AND sourceProjectId = ?',
-    args: [email, sourceProjectId],
-  })
-  const nextTurso = tursoConfigEnc !== undefined ? tursoConfigEnc : (existing.rows[0]?.tursoConfigEnc ?? null)
-  const nextR2 = r2ConfigEnc !== undefined ? r2ConfigEnc : (existing.rows[0]?.r2ConfigEnc ?? null)
-
   await db.execute({
-    sql: `INSERT INTO savedStorageConfigs (ownerEmail, sourceProjectId, sourceProjectName, tursoConfigEnc, r2ConfigEnc, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(ownerEmail, sourceProjectId) DO UPDATE SET
-            sourceProjectName = excluded.sourceProjectName,
+    sql: `INSERT INTO savedStorageConfigs (ownerEmail, name, tursoConfigEnc, r2ConfigEnc, updatedAt)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(ownerEmail, name) DO UPDATE SET
             tursoConfigEnc = excluded.tursoConfigEnc,
             r2ConfigEnc = excluded.r2ConfigEnc,
             updatedAt = excluded.updatedAt`,
-    args: [email, sourceProjectId, sourceProjectName, nextTurso, nextR2, new Date().toISOString()],
+    args: [email, name, tursoConfigEnc ?? null, r2ConfigEnc ?? null, new Date().toISOString()],
+  })
+}
+
+/** 保存済み設定を削除する。ownerEmailが一致しない場合（他人のもの）は何もしない。 */
+export async function deleteSavedStorageConfig(id, ownerEmail) {
+  await db.execute({
+    sql: 'DELETE FROM savedStorageConfigs WHERE id = ? AND ownerEmail = ?',
+    args: [id, normalizeEmail(ownerEmail)],
   })
 }
 

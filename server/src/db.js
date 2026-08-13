@@ -144,20 +144,20 @@ await db.executeMultiple(`
     bytesUsed INTEGER NOT NULL DEFAULT 0
   );
 
-  -- あるユーザーが過去にプロジェクトへ設定したTurso/R2接続情報を、別のプロジェクトの設定時に
-  -- 呼び出せるようにするための保存先。ownerEmailが「設定した本人」で、この本人以外は
-  -- 一覧にも取得にも出てこない（他メンバーが人の接続情報を呼び出せないようにするための境界）。
-  -- (ownerEmail, sourceProjectId)一意: 同じ人が同じプロジェクトで設定し直すたびに上書きする
-  -- （履歴は持たず常に最新の1件のみ）。
+  -- ユーザーが「名前を付けて保存」したTurso/R2接続情報。プロジェクトに自動で紐付けるのではなく、
+  -- ユーザー自身が任意の名前を付けて明示的に保存する（例:「本番用R2+Turso」）。これにより、
+  -- プロジェクト数が増えても呼び出せる設定の一覧が際限なく増えたり、同じ接続情報が
+  -- プロジェクトの数だけ重複して並んだりしない。ownerEmailが「保存した本人」で、
+  -- この本人以外は一覧にも取得にも出てこない（他メンバーが人の接続情報を呼び出せないようにする境界）。
+  -- (ownerEmail, name)一意: 同じ人が同じ名前で保存し直すたびに上書きする。
   CREATE TABLE IF NOT EXISTS savedStorageConfigs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ownerEmail TEXT NOT NULL,
-    sourceProjectId INTEGER NOT NULL,
-    sourceProjectName TEXT NOT NULL,
+    name TEXT NOT NULL,
     tursoConfigEnc TEXT,
     r2ConfigEnc TEXT,
     updatedAt TEXT NOT NULL,
-    UNIQUE(ownerEmail, sourceProjectId)
+    UNIQUE(ownerEmail, name)
   );
 `)
 
@@ -276,6 +276,42 @@ async function migrateAddStorageConfiguredByIfNeeded() {
 }
 
 await migrateAddStorageConfiguredByIfNeeded()
+
+// マイグレーション: savedStorageConfigsを「プロジェクトに自動紐付け」から「ユーザーが名前を付けて
+// 保存」する形に作り直す（sourceProjectId/sourceProjectName列 → name列）。この機能はリリース
+// 直後でまだ実運用データが無いに等しいため、既存行を作り直す形の単純なマイグレーションにする
+// （名前は移行時点ではsourceProjectNameを流用しておく）。
+async function migrateSavedStorageConfigsToNamedIfNeeded() {
+  const { rows: columns } = await db.execute('PRAGMA table_info(savedStorageConfigs)')
+  if (columns.length === 0) return // 新規DBは最初からname列を持つ
+  const hasName = columns.some((c) => c.name === 'name')
+  if (hasName) return
+
+  const { rows: old } = await db.execute(
+    'SELECT ownerEmail, sourceProjectName, tursoConfigEnc, r2ConfigEnc, updatedAt FROM savedStorageConfigs'
+  )
+  await db.execute('DROP TABLE savedStorageConfigs')
+  await db.execute(`
+    CREATE TABLE savedStorageConfigs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ownerEmail TEXT NOT NULL,
+      name TEXT NOT NULL,
+      tursoConfigEnc TEXT,
+      r2ConfigEnc TEXT,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(ownerEmail, name)
+    )
+  `)
+  for (const row of old) {
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO savedStorageConfigs (ownerEmail, name, tursoConfigEnc, r2ConfigEnc, updatedAt)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [row.ownerEmail, row.sourceProjectName, row.tursoConfigEnc, row.r2ConfigEnc, row.updatedAt],
+    })
+  }
+}
+
+await migrateSavedStorageConfigsToNamedIfNeeded()
 
 // マイグレーション: 1件のバグ報告に1つだけだった「種類」(tag/tagLabel列)を、複数付けられる
 // tags列（JSON配列の文字列）に置き換える。ラベルはTAG_LABELS（server/src/data.js）から
