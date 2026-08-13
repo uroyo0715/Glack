@@ -96,7 +96,7 @@ describe('ProjectsPage', () => {
     const user = userEvent.setup()
     const props = renderPage()
 
-    await user.click(screen.getByRole('button', { name: /Unity連携の使い方/ }))
+    await user.click(screen.getByRole('button', { name: /SDK連携の使い方/ }))
     expect(props.onOpenHelp).toHaveBeenCalledTimes(1)
   })
 

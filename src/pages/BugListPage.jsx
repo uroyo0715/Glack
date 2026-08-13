@@ -25,6 +25,7 @@ export default function BugListPage({
   onFetchMembers,
   onAddMembers,
   onRemoveMember,
+  onOpenHelp,
   onCreateReport,
   defaultReporterName,
   storageStatus,
@@ -102,6 +103,9 @@ export default function BugListPage({
               onClick={() => setShowFieldOptions((v) => !v)}
             >
               選択肢の管理
+            </button>
+            <button type="button" className="help-link" onClick={onOpenHelp}>
+              SDK連携の使い方
             </button>
             <SegmentedToggle
               value={view}

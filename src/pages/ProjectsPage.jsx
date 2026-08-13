@@ -169,7 +169,7 @@ export default function ProjectsPage({
               {selecting ? '選択を解除' : '選択'}
             </button>
             <button className="help-link" onClick={onOpenHelp}>
-              Unity連携の使い方 →
+              SDK連携の使い方 →
             </button>
           </div>
         </div>

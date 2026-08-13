@@ -101,6 +101,9 @@ function AppShell({ user, setUser }) {
       : null
   const selectedId = reportMatch ? Number(reportMatch.params.reportId) : null
   const showHelp = location.pathname === '/help'
+  // ヘルプをプロジェクトのバグ一覧から開いた場合、そのプロジェクトの使用エンジンに合わせて
+  // Unity/Godotどちらの手順を最初に出すか決める（?engine=godot 等）。
+  const helpDefaultEngine = new URLSearchParams(location.search).get('engine') === 'godot' ? 'godot' : 'unity'
 
   const [projects, setProjects] = useState([])
   const [projectsLoading, setProjectsLoading] = useState(true)
@@ -528,7 +531,7 @@ function AppShell({ user, setUser }) {
       </header>
 
       {showHelp ? (
-        <HelpPage />
+        <HelpPage defaultEngine={helpDefaultEngine} />
       ) : selectedProjectId == null ? (
         projectsLoading ? (
           <div className="state-panel">読み込み中...</div>
@@ -591,6 +594,7 @@ function AppShell({ user, setUser }) {
           bugsLoading={bugsLoading}
           bugsError={bugsError}
           onOpen={(id) => navigate(`/projects/${selectedProjectId}/reports/${id}`)}
+          onOpenHelp={() => navigate(`/help?engine=${selectedProject?.gameEngine === 'godot' ? 'godot' : 'unity'}`)}
           projectId={selectedProjectId}
           projectName={selectedProject?.name ?? ''}
           onFetchMembers={fetchProjectMembers}
