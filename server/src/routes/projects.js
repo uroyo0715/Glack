@@ -334,12 +334,16 @@ router.patch(
     const updated = await updateProjectStorageConfig(projectId, update)
 
     if (turso != null || r2 != null) {
+      // 「今回のリクエストで触った方だけ」ではなく、プロジェクトが現在実際に持っている
+      // tursoConfigEnc/r2ConfigEncをそのまま丸ごと保存する。片方だけ更新した場合でも、
+      // もう片方がこの機能の導入前から既に設定済みだったケースを取りこぼさないため
+      // （そうしないと、Tursoだけ入力し直した時に保存済み設定からR2が消えてしまう）。
       await upsertSavedStorageConfig({
         ownerEmail: req.user.email,
         sourceProjectId: projectId,
         sourceProjectName: updated.name,
-        tursoConfigEnc: turso != null ? update.tursoConfigEnc : undefined,
-        r2ConfigEnc: r2 != null ? update.r2ConfigEnc : undefined,
+        tursoConfigEnc: updated.tursoConfigEnc,
+        r2ConfigEnc: updated.r2ConfigEnc,
       })
     }
 
@@ -393,12 +397,14 @@ router.post(
 
     const updated = await updateProjectStorageConfig(projectId, update)
 
+    // 「今回適用した方だけ」ではなく、対象プロジェクトが現在実際に持っているtursoConfigEnc/
+    // r2ConfigEncをそのまま丸ごと保存する（PATCH /storageと同じ理由）。
     await upsertSavedStorageConfig({
       ownerEmail: req.user.email,
       sourceProjectId: projectId,
       sourceProjectName: updated.name,
-      tursoConfigEnc: saved.tursoConfigEnc ? saved.tursoConfigEnc : undefined,
-      r2ConfigEnc: saved.r2ConfigEnc ? saved.r2ConfigEnc : undefined,
+      tursoConfigEnc: updated.tursoConfigEnc,
+      r2ConfigEnc: updated.r2ConfigEnc,
     })
 
     invalidateProjectDataClientCache(projectId)

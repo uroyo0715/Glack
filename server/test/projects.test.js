@@ -4,7 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
-import { setProjectManagedAllowed } from '../src/data.js'
+import { setProjectManagedAllowed, updateProjectStorageConfig } from '../src/data.js'
+import { encryptR2Config } from '../src/projectDataAccess.js'
 
 before(startServer)
 after(stopServer)
@@ -488,6 +489,52 @@ test('saved storage configs can be recalled by the same owner on another project
     body: JSON.stringify({ savedConfigId: ownConfigs[0].id }),
   })
   assert.equal(teammateApply.status, 404)
+})
+
+// R2/Tursoが「この保存済み設定を呼び出す」機能の導入より前から既に設定されていたプロジェクト
+// （＝savedStorageConfigsにまだ行がない）で、片方だけを再設定した場合の回帰テスト。
+// 一度だけ触った方の値だけを保存すると、既に設定済みだったもう片方が保存済み設定から
+// 消えてしまうバグがあった（プロジェクト自体には残っているのに、呼び出す側には現れない）。
+test('re-saving only turso on a project that already had r2 configured keeps r2 in the saved config too', async () => {
+  const owner = await createAuthCookie()
+  const sourceProject = await createProjectAs(owner.cookie, '既存R2設定済みプロジェクト')
+
+  // この機能の導入前と同じ状態を再現するため、ルート経由ではなくdata.js直で
+  // r2ConfigEncだけを先に設定しておく（＝savedStorageConfigsにはまだ何も残らない）。
+  await updateProjectStorageConfig(sourceProject.id, {
+    r2ConfigEnc: encryptR2Config({
+      accountId: 'acc',
+      accessKeyId: 'key',
+      secretAccessKey: 'secret',
+      bucket: 'bucket',
+      publicUrl: 'https://pub-example.r2.dev',
+    }),
+  })
+
+  // この機能の導入後、Tursoだけを（再）設定する。
+  const tursoUrl = `file:${path.join(os.tmpdir(), `glank-repro-${crypto.randomUUID()}.sqlite`)}`
+  const tursoPatch = await fetch(`${getBaseUrl()}/projects/${sourceProject.id}/storage`, {
+    method: 'PATCH',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turso: { url: tursoUrl, authToken: 'unused' } }),
+  })
+  assert.equal(tursoPatch.status, 200)
+
+  const targetProject = await createProjectAs(owner.cookie, '適用先プロジェクト2')
+  const list = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/saved-configs`, {
+    headers: { Cookie: owner.cookie },
+  })
+  const configs = await list.json()
+  assert.equal(configs[0].hasTurso, true)
+  assert.equal(configs[0].hasR2, true) // ここが導入前から設定済みだったR2
+
+  const applyRes = await fetch(`${getBaseUrl()}/projects/${targetProject.id}/storage/apply-saved`, {
+    method: 'POST',
+    headers: { Cookie: owner.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ savedConfigId: configs[0].id }),
+  })
+  const applied = await applyRes.json()
+  assert.equal(applied.r2Configured, true)
 })
 
 test('POST /projects/:id/storage/apply-saved validates the body and requires membership', async () => {

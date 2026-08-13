@@ -180,9 +180,10 @@ export default function StorageSettingsPanel({ projectId, onFetchStatus, onUpdat
           <ul className="storage-saved-configs-list">
             {savedConfigs.map((c) => (
               <li key={c.id} className="storage-saved-config-item">
-                <span className="storage-saved-config-tag">ストレージ設定者（{c.sourceProjectName}）</span>
+                <span className="storage-saved-config-tag">{c.sourceProjectName}</span>
                 <button
                   type="button"
+                  className="storage-saved-config-apply-button"
                   disabled={applyingId === c.id}
                   onClick={() => handleApplySaved(c.id)}
                 >

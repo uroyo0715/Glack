@@ -298,10 +298,9 @@ export async function updateProjectStorage(projectId, { storageMode, turso, r2 }
   }
   if (turso != null || r2 != null) {
     current.configuredByName = currentUser.displayName
-    upsertMockSavedStorageConfig(id, {
-      hasTurso: turso != null ? true : undefined,
-      hasR2: r2 != null ? true : undefined,
-    })
+    // 「今回触った方だけ」ではなく、プロジェクトが現在実際に持っている状態を丸ごと保存する
+    // （片方だけ更新した場合でも、もう片方が既に設定済みだったケースを取りこぼさないため）。
+    upsertMockSavedStorageConfig(id, { hasTurso: current.tursoConfigured, hasR2: current.r2Configured })
   }
   storageByProject.set(id, current)
   return { ...current }
@@ -336,10 +335,7 @@ export async function applySavedStorageConfig(projectId, savedConfigId) {
   if (saved.hasR2) current.r2Configured = true
   current.configuredByName = currentUser.displayName
   storageByProject.set(id, current)
-  upsertMockSavedStorageConfig(id, {
-    hasTurso: saved.hasTurso ? true : undefined,
-    hasR2: saved.hasR2 ? true : undefined,
-  })
+  upsertMockSavedStorageConfig(id, { hasTurso: current.tursoConfigured, hasR2: current.r2Configured })
   return { ...current }
 }
 
