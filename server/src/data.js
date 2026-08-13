@@ -677,9 +677,13 @@ export async function removeProjectMember(projectId, email) {
   return result.rowsAffected > 0
 }
 
+// isManagedAllowed=1をデフォルトにしている理由: 元々は複数チームへの有料販売を想定した
+// ゲート（チームごとに個別にTurso/R2を持つself_hostedが既定、managedは許可制）だったが、
+// 実際には運営者自身のチームで使うことが主目的のため、新規プロジェクトは最初から
+// Glank共有のmanagedストレージ（プロジェクトごとのTurso/R2設定が不要）を選べるようにする。
 export async function createProject({ name, imageUrl, creatorEmail }) {
   const result = await db.execute({
-    sql: 'INSERT INTO projects (name, imageUrl) VALUES (?, ?)',
+    sql: 'INSERT INTO projects (name, imageUrl, isManagedAllowed) VALUES (?, ?, 1)',
     args: [name, imageUrl ?? null],
   })
   const projectId = result.lastInsertRowid

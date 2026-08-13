@@ -114,7 +114,7 @@ export async function createProject(name, imageFile) {
   membersByProject.set(project.id, [{ email: currentUser.email, displayName: currentUser.displayName }])
   storageByProject.set(project.id, {
     storageMode: 'self_hosted',
-    isManagedAllowed: false,
+    isManagedAllowed: true,
     tursoConfigured: false,
     r2Configured: false,
   })

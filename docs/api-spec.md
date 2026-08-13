@@ -143,10 +143,13 @@ Webアプリのプロジェクト一覧画面（`src/pages/ProjectsPage.jsx`）�
 #### 3.0.6 ストレージ設定（self_hosted / managed）
 
 各プロジェクトは、バグデータの保存先（DB）と動画・画像の保存先（ストレージ）を
-チーム自前のもの（`self_hosted`、無料）か、Glankが用意する共有のもの（`managed`、
-有料プラン。`isManagedAllowed`が立っているプロジェクトのみ選択可）かを選べる。
-新規プロジェクトは常に`self_hosted`・未設定から始まり、Turso接続情報を設定するまで
-`/reports*`系のエンドポイントは`409 { error, code: 'turso_not_configured' }`を返す。
+チーム自前のもの（`self_hosted`、プロジェクトごとにTurso/R2の設定が必要）か、
+Glankが用意する共有のもの（`managed`、プロジェクトごとの設定不要。プロジェクト単位500MB・
+全体8GBの上限あり）かを選べる。`isManagedAllowed`が立っているプロジェクトのみmanagedを選択可
+（新規プロジェクトは既定でtrue。他チームへの提供等でmanaged利用を制限したい場合のゲートとして
+残している）。新規プロジェクトは`storageMode: self_hosted`・未設定から始まり、`managed`へ切り替える
+かTurso接続情報を設定するまで`/reports*`系のエンドポイントは`409 { error, code: 'turso_not_configured' }`
+を返す。
 
 self_hosted接続情報（Tursoの`url`/`authToken`、R2の各値）はAES-256-GCMで暗号化して
 DBに保存し（`server/src/crypto.js`）、一度保存した値はAPI経由で平文では読み出せない

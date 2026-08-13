@@ -80,8 +80,10 @@ await db.executeMultiple(`
     displayName TEXT NOT NULL
   );
 
-  -- storageMode: 'self_hosted'（既定、チーム自前のTurso/R2。Glank側のコストはゼロ）
-  --            | 'managed'（Glankが用意した共有Turso/R2を使う有料プラン。isManagedAllowed=1のみ選択可）
+  -- storageMode: 'self_hosted'（既定、チーム自前のTurso/R2。プロジェクトごとに設定が必要）
+  --            | 'managed'（Glankが用意した共有Turso/R2を使う。プロジェクトごとの設定不要、
+  --               プロジェクト単位500MB・全体8GBの上限あり。isManagedAllowed=1のみ選択可、
+  --               新規プロジェクトは既定でtrue。他チームへの提供等で制限したい場合のゲート）
   -- tursoConfigEnc/r2ConfigEnc: self_hosted時の接続情報をAES-256-GCMで暗号化したJSON
   -- （server/src/crypto.js）。未設定の間はNULL。
   -- hiddenFieldOptions: 種類・優先度・プラットフォームのプルダウンで、このプロジェクトでは

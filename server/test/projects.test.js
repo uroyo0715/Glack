@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { startServer, stopServer, getBaseUrl, createAuthCookie, createManagedProject } from './helpers.js'
+import { setProjectManagedAllowed } from '../src/data.js'
 
 before(startServer)
 after(stopServer)
@@ -238,7 +239,7 @@ test('DELETE /projects/:id/members refuses to remove the last remaining member',
 
 // --- ストレージ設定（self_hosted / managed） ---
 
-test('a new project defaults to storageMode self_hosted, unconfigured, and managed not allowed', async () => {
+test('a new project defaults to storageMode self_hosted, unconfigured, and managed allowed', async () => {
   const owner = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, 'ストレージ既定値テスト')
 
@@ -248,7 +249,7 @@ test('a new project defaults to storageMode self_hosted, unconfigured, and manag
   assert.equal(res.status, 200)
   assert.deepEqual(await res.json(), {
     storageMode: 'self_hosted',
-    isManagedAllowed: false,
+    isManagedAllowed: true,
     tursoConfigured: false,
     r2Configured: false,
   })
@@ -325,6 +326,9 @@ test('self_hosted projects block bug creation until Turso/R2 are configured, the
 test('switching to managed requires isManagedAllowed', async () => {
   const owner = await createAuthCookie()
   const project = await createProjectAs(owner.cookie, 'managed拒否テスト')
+  // 新規プロジェクトは既定でisManagedAllowed=trueのため、拒否されるケース自体を
+  // テストするにはここで明示的にfalseへ戻す必要がある。
+  await setProjectManagedAllowed(project.id, false)
 
   const res = await fetch(`${getBaseUrl()}/projects/${project.id}/storage`, {
     method: 'PATCH',
