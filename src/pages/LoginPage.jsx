@@ -22,6 +22,10 @@ export default function LoginPage({ onGoogleLogin }) {
         </div>
         <h1>ログイン</h1>
         <p className="login-hint">Googleアカウントでログインしてください。</p>
+        <p className="login-server-notice">
+          サーバーの都合上、しばらく使われていないと起動に時間がかかることがあります
+          （初回アクセス時は数十秒ほどお待ちください）。
+        </p>
 
         {error && <div className="login-error">{error}</div>}
 

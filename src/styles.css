@@ -15,6 +15,7 @@
   --accent-cyan: #5ba39a;
   --accent-red: #c1615a;
   /* 対応状況（status）専用のアクセント。tagの配色と重複させない。 */
+  --status-todo: #cf6d6d;
   --status-progress: #6d93c9;
   --status-review: #c97b3f;
   --status-done: #7fae7a;
@@ -198,6 +199,12 @@ body {
   font-size: 13px;
   color: var(--text-dim);
   margin: 0;
+}
+.login-server-notice {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: -6px 0 0;
+  line-height: 1.6;
 }
 .login-error {
   color: var(--error, #d9534f);
@@ -1398,9 +1405,9 @@ body {
    （種類は自由記述でプロジェクトごとに違うため色は付けない。対応状況だけがこのアプリの
    固定の色言語を持つ軸になる）。 */
 .chip.status-chip.todo.active {
-  border-color: var(--text-faint);
-  color: var(--text-dim);
-  background: var(--surface-3);
+  border-color: var(--status-todo);
+  color: var(--status-todo);
+  background: rgba(207, 109, 109, 0.12);
 }
 .chip.status-chip.in_progress.active {
   border-color: var(--status-progress);
@@ -1488,8 +1495,8 @@ body {
   display: inline-block;
 }
 .status-badge.todo {
-  border-color: var(--text-faint);
-  color: var(--text-dim);
+  border-color: var(--status-todo);
+  color: var(--status-todo);
 }
 .status-badge.in_progress {
   border-color: var(--status-progress);
