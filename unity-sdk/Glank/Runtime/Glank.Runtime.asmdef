@@ -1,7 +1,9 @@
 {
     "name": "Glank.Runtime",
     "rootNamespace": "Glank",
-    "references": [],
+    "references": [
+        "Unity.InputSystem"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
@@ -9,6 +11,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "GLANK_INPUT_SYSTEM_PRESENT"
+        }
+    ],
     "noEngineReferences": false
 }
