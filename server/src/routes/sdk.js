@@ -1,6 +1,7 @@
 import express from 'express'
 import path from 'node:path'
 import fs from 'node:fs'
+import { execSync } from 'node:child_process'
 import { ZipArchive } from 'archiver'
 import { asyncHandler } from '../asyncHandler.js'
 
@@ -8,6 +9,19 @@ const router = express.Router()
 
 // server/src/routes -> server/src -> server -> リポジトリルート
 const REPO_ROOT = path.join(import.meta.dirname, '..', '..', '..')
+
+// ダウンロードしたSDKが本当に最新の修正を含んでいるか、手元で見て分かるようにするための
+// バージョン情報。デプロイのたびに変わるgit commit hashをそのまま埋め込む（プロセス起動時に
+// 一度だけ取得。リクエストのたびにgitを呼ぶ必要はない）。
+// Renderのビルド環境に.gitが無い場合など取得に失敗しても、SDK配布自体は止めたくないので
+// 'unknown'にフォールバックする。
+const SDK_VERSION = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: REPO_ROOT }).toString().trim()
+  } catch {
+    return 'unknown'
+  }
+})()
 
 // ヘルプページの「SDK連携の使い方」からダウンロードできるようにする、SDKフォルダの実体。
 // unity-sdk/godot-sdkはserver/の外（リポジトリ直下）にあるため、Renderのデプロイが
@@ -46,6 +60,9 @@ router.get(
     })
     archive.pipe(res)
     archive.directory(source.dir, path.basename(source.dir))
+    archive.append(`commit: ${SDK_VERSION}\nbuilt: ${new Date().toISOString()}\n`, {
+      name: path.join(path.basename(source.dir), 'VERSION.txt'),
+    })
     await archive.finalize()
   })
 )
