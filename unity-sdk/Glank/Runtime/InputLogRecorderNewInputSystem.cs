@@ -1,4 +1,4 @@
-#if GLANK_INPUT_SYSTEM_PRESENT
+#if ENABLE_INPUT_SYSTEM
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,7 +19,7 @@ namespace Glank
     /// <see cref="InputLogRecorder"/> の新Input System（com.unity.inputsystem）版。
     /// レガシー Input クラスの代わりに <see cref="Keyboard.current"/> を使う点以外は同じ挙動。
     ///
-    /// このファイルは丸ごと `#if GLANK_INPUT_SYSTEM_PRESENT` で囲ってあるため、Input Systemパッケージを
+    /// このファイルは丸ごと `#if ENABLE_INPUT_SYSTEM` で囲ってあるため、Input Systemパッケージを
     /// 導入していないプロジェクトでは単純に何もコンパイルされない（エラーにならない）。
     /// 新Input Systemを使うプロジェクトでは、InputLogRecorderの代わりにこちらをアタッチする。
     /// </summary>
