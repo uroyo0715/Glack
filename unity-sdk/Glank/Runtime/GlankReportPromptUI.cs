@@ -25,6 +25,9 @@ namespace Glank
         )]
         [SerializeField] private Dropdown tagDropdown;
         [SerializeField] private InputField descField;
+        [Tooltip("「誰が報告したか」欄（任意）。未設定なら報告者名の入力機能自体を使わない。" +
+            "空欄のまま送信すると、これまで設定した報告者名（無ければ端末名）を使う。")]
+        [SerializeField] private InputField reporterNameField;
         [Tooltip("選択肢の並び順は0:high 1:medium 2:low を想定")]
         [SerializeField] private Dropdown priorityDropdown;
         [SerializeField] private Button submitButton;
@@ -46,6 +49,8 @@ namespace Glank
         {
             if (titleField != null) titleField.text = "";
             if (descField != null) descField.text = "";
+            // 報告者名は前回設定した値を引き継いで表示する（毎回入力し直さなくていいように）。
+            if (reporterNameField != null) reporterNameField.text = GlankReporterIdentity.GetReporterName();
             if (panelRoot != null) panelRoot.SetActive(true);
         }
 
@@ -73,11 +78,16 @@ namespace Glank
                 priorityDropdown != null ? priorityDropdown.value : DefaultPriorityIndex,
                 0, PriorityValues.Length - 1)];
 
+            if (reporterNameField != null && !string.IsNullOrWhiteSpace(reporterNameField.text))
+            {
+                GlankReporterIdentity.SetReporterName(reporterNameField.text);
+            }
+
             trigger.SubmitReport(
                 title: title,
                 tags: new[] { tag },
                 desc: desc,
-                who: SystemInfo.deviceName,
+                who: GlankReporterIdentity.GetReporterName(),
                 build: Application.version,
                 platform: Application.platform.ToString(),
                 priority: priority);

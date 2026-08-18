@@ -184,6 +184,7 @@ Canvas
    ├─ TagDropdown（Dropdown。選択肢: crash / visual / softlock の順） → tagDropdown
    ├─ DescInputField（InputField, Multi Line） → descField
    ├─ PriorityDropdown（Dropdown。選択肢: high / medium / low の順） → priorityDropdown
+   ├─ ReporterNameInputField（InputField, 任意） → reporterNameField
    ├─ SubmitButton（Button）             → submitButton
    └─ CancelButton（Button）             → cancelButton
 ```
@@ -193,6 +194,28 @@ Canvas
 `promptUI`にこの`GlankReportPromptUI`をアサインすると、ホットキーで即送信する代わりに
 このフォームが開くようになる。ゲームを一時停止したい場合は、`Show()`が呼ばれるタイミングを
 フックして`Time.timeScale = 0`にする等、呼び出し側で行う（SDK側では強制しない）。
+
+## 報告者名（GlankReporterIdentity）
+
+既定では報告の`who`欄に`SystemInfo.deviceName`（端末名）が入るだけで、実際に誰が
+報告したのかは分からない。`GlankReporterIdentity`を使うと、ゲーム内の好きな場所
+（設定画面、初回起動時のプロンプト等）から報告者名を設定でき、以降のすべての報告に
+自動で使われる（`PlayerPrefs`に保存されるため、ゲームを再起動しても保持される）。
+
+```csharp
+using Glank;
+
+// ゲーム側の好きなタイミングで呼ぶ（例: 名前入力フォームのSubmitボタンから）
+GlankReporterIdentity.SetReporterName("田中QA");
+
+// 現在の報告者名を表示したい場合（未設定ならdeviceNameが返る）
+string current = GlankReporterIdentity.GetReporterName();
+```
+
+`GlankReportPromptUI`を使っている場合は、上記Hierarchyの`ReporterNameInputField`を
+アサインするだけで、フォームを開いた時に現在の報告者名が表示され、送信時に入力し直した
+内容が自動で保存される（コードを書く必要はない）。ホットキー即送信（`promptUI`未設定）の
+場合も、設定済みの報告者名があればそちらが使われる。
 
 ## 入力ログからの再現（GlankReplayer）
 
